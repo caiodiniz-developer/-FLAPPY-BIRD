@@ -297,5 +297,4 @@ class Button:
         pygame.draw.rect(surface, tuple(max(0, c - 45) for c in color), (self.rect.x + 4, self.rect.bottom - 8, self.rect.width - 8, 4))
         text = font.render(self.label, True, self.text_color)
         text_rect = text.get_rect(center=self.rect.center)
-        surface.blit(font.render(self.label, True, (17, 21, 39)), text_rect.move(2, 2))
         surface.blit(text, text_rect)

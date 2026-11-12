@@ -43,12 +43,12 @@ class FlappyGame:
         if self.save_data["settings"].get("fullscreen", False):
             display_flags |= pygame.FULLSCREEN
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), display_flags)
-        self.font = pygame.font.SysFont("Arial", 30)
-        self.big_font = pygame.font.SysFont("Arial", 52, bold=True)
-        self.small_font = pygame.font.SysFont("Arial", 22)
-        self.arcade_font = pygame.font.SysFont("Arial", 58, bold=True)
-        self.arcade_small_font = pygame.font.SysFont("Arial", 19, bold=True)
-        self.hud_score_font = pygame.font.SysFont("Arial", 40, bold=True)
+        self.font = pygame.font.SysFont("Bahnschrift", 30)
+        self.big_font = pygame.font.SysFont("Bahnschrift", 52, bold=True)
+        self.small_font = pygame.font.SysFont("Bahnschrift", 22)
+        self.arcade_font = pygame.font.SysFont("Bahnschrift", 58, bold=True)
+        self.arcade_small_font = pygame.font.SysFont("Bahnschrift", 18, bold=True)
+        self.hud_score_font = pygame.font.SysFont("Bahnschrift", 40, bold=True)
         self.loading_steps = [
             "Inicializando Pygame",
             "Carregando cenários",
@@ -116,6 +116,7 @@ class FlappyGame:
         self.streak = 0
         self.best_streak = 0
         self.pipes_spawned = 0
+        self.perfect_timer = 0.0
         self.pipe_timer = 0.0
         self.sound_timer = 0.0
         self.started = False
@@ -297,6 +298,12 @@ class FlappyGame:
                 self.best_streak = max(self.best_streak, self.streak)
                 self.save_data["stats"]["total_obstacles_passed"] += 1
                 self.add_particles(self.bird.x, 100, self.current_scene["accent"])
+                gap_center = pipe.gap_y + pipe.gap_height / 2
+                perfect_threshold = max(18, pipe.gap_height * 0.18)
+                if abs(self.bird.y - gap_center) <= perfect_threshold:
+                    self.round_coins += 1
+                    self.perfect_timer = 1.4
+                    self.add_particles(self.bird.x, self.bird.y, (255, 226, 117))
                 if self.streak % 5 == 0:
                     self.round_coins += 2
                     self.add_particles(self.bird.x, 142, (255, 214, 100))
@@ -473,6 +480,7 @@ class FlappyGame:
             return
 
         if self.state == "playing":
+            self.perfect_timer = max(0.0, self.perfect_timer - dt)
             self.update_game(dt)
             return
 
@@ -872,7 +880,7 @@ class FlappyGame:
         difficulty = DIFFICULTY_PRESETS.get(settings.get("difficulty"), DIFFICULTY_PRESETS["normal"])["label"]
         rows = (
             (385, "DIFICULDADE", difficulty, "Altera a velocidade e o espaço entre os obstáculos."),
-            (455, "LIMITE DE FPS", f"{settings.get('fps_limit', 60) or 'SEM LIMITE'}", "Ciclo: 30 → 60 → 120 → sem limite."),
+            (455, "LIMITE DE FPS", f"{settings.get('fps_limit', 60) or 'SEM LIMITE'}", "Ciclo: 30 / 60 / 120 / sem limite."),
             (520, "TELA", "INTEIRA" if settings.get("fullscreen", False) else "JANELA", "Clique para alternar o modo de exibição."),
             (580, "PARTÍCULAS", "ATIVADAS" if settings.get("particles_enabled", True) else "DESATIVADAS", "Desative para reduzir efeitos visuais."),
         )
@@ -964,6 +972,16 @@ class FlappyGame:
         self.screen.blit(streak_count, streak_count.get_rect(midtop=(streak_panel.centerx, 54)))
         pause_button = Button(1156, 22, 88, 48, "II", None, accent=(255, 204, 112), text_color=(35, 28, 38))
         pause_button.draw(self.screen, self.arcade_small_font)
+
+        if self.perfect_timer > 0 and self.state == "playing":
+            banner = pygame.Rect(472, 112, 336, 42)
+            pygame.draw.rect(self.screen, (9, 20, 34), banner.move(0, 4))
+            pygame.draw.rect(self.screen, (31, 57, 68), banner)
+            pygame.draw.rect(self.screen, (255, 218, 112), banner, width=2)
+            perfect_label = self.arcade_small_font.render("VOO PERFEITO  +1 MOEDA", True, (255, 232, 150))
+            self.screen.blit(perfect_label, perfect_label.get_rect(center=banner.center))
+            bar_width = round(banner.width * self.perfect_timer / 1.4)
+            pygame.draw.rect(self.screen, (255, 190, 70), (banner.x, banner.bottom - 3, bar_width, 3))
 
         if self.state == "game_over":
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
