@@ -23,6 +23,16 @@ BIRD_TYPES = [
     {"id": "legend", "name": "Pássaro Lendário", "price": 650, "rarity": "Mitológico", "description": "O campeão supremo da noite.", "colors": (255, 80, 180), "accent": (255, 225, 120)},
 ]
 
+BIRD_OUTFITS = [
+    {"id": "none", "name": "Sem acessório", "price": 0, "style": "none", "color": (225, 231, 220), "description": "Visual clássico."},
+    {"id": "pilot", "name": "Boné de piloto", "price": 90, "style": "pilot", "color": (75, 145, 210), "description": "Pronto pra voar."},
+    {"id": "bandana", "name": "Bandana turbo", "price": 120, "style": "bandana", "color": (232, 83, 77), "description": "Rápida em curvas."},
+    {"id": "explorer", "name": "Chapéu explorador", "price": 180, "style": "explorer", "color": (180, 129, 72), "description": "Explore novos céus."},
+    {"id": "crown", "name": "Coroa pixel", "price": 240, "style": "crown", "color": (255, 196, 60), "description": "Realeza dos ares."},
+    {"id": "hero", "name": "Capa de herói", "price": 280, "style": "hero", "color": (187, 83, 220), "description": "Rastro de herói."},
+    {"id": "space", "name": "Capacete orbital", "price": 320, "style": "space", "color": (76, 218, 228), "description": "Para outro mundo."},
+]
+
 SCENARIOS = [
     {"id": "classic", "name": "Campo Clássico", "price": 0, "unlock_text": "Disponível desde o início.", "sky_top": (111, 200, 255), "sky_bottom": (173, 227, 255), "ground_top": (21, 151, 81), "ground_bottom": (64, 189, 95), "cloud": (255, 255, 255), "mountain_a": (90, 146, 104), "mountain_b": (63, 108, 82), "accent": (255, 225, 120), "theme": "day"},
     {"id": "night", "name": "Noite", "price": 200, "unlock_text": "Desbloqueia com 200 moedas.", "sky_top": (8, 12, 35), "sky_bottom": (32, 50, 92), "ground_top": (23, 42, 68), "ground_bottom": (11, 22, 43), "cloud": (200, 220, 255), "mountain_a": (53, 63, 91), "mountain_b": (28, 39, 63), "accent": (255, 220, 130), "theme": "night"},

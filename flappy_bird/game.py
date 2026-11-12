@@ -7,6 +7,7 @@ from flappy_bird.achievements import evaluate_achievements
 from flappy_bird.config import (
     ACHIEVEMENTS,
     BIRD_TYPES,
+    BIRD_OUTFITS,
     FPS,
     PIPE_GAP,
     SCENARIOS,
@@ -39,6 +40,15 @@ class FlappyGame:
         self.current_bird_id = self.save_data["selected_bird"]
         self.current_scene = self.scene_by_id(self.current_scene_id)
         self.current_bird = self.bird_by_id(self.current_bird_id)
+        self.save_data.setdefault("unlocked_outfits", ["none"])
+        if "none" not in self.save_data["unlocked_outfits"]:
+            self.save_data["unlocked_outfits"].append("none")
+        self.current_outfit_id = self.save_data.get("selected_outfit", "none")
+        self.current_outfit = self.outfit_by_id(self.current_outfit_id)
+        if self.current_outfit_id not in self.save_data["unlocked_outfits"]:
+            self.current_outfit_id = "none"
+            self.current_outfit = self.outfit_by_id("none")
+        self.shop_category = "birds"
         display_flags = pygame.SCALED | pygame.RESIZABLE
         if self.save_data["settings"].get("fullscreen", False):
             display_flags |= pygame.FULLSCREEN
@@ -79,8 +89,8 @@ class FlappyGame:
         ]
 
         self.reset_run()
-        self.menu_bird = Bird(900, 375, self.bird_by_id(self.current_bird_id))
-        self.loading_bird = Bird(300, 455, self.bird_by_id(self.current_bird_id))
+        self.menu_bird = Bird(900, 375, self.bird_by_id(self.current_bird_id), self.current_outfit)
+        self.loading_bird = Bird(300, 455, self.bird_by_id(self.current_bird_id), self.current_outfit)
         self.menu_elapsed = 0.0
         self.loading_elapsed = 0.0
         self.populate_menu_buttons()
@@ -90,6 +100,12 @@ class FlappyGame:
             if bird["id"] == bird_id:
                 return bird
         return BIRD_TYPES[0]
+
+    def outfit_by_id(self, outfit_id):
+        for outfit in BIRD_OUTFITS:
+            if outfit["id"] == outfit_id:
+                return outfit
+        return BIRD_OUTFITS[0]
 
     def scene_by_id(self, scene_id):
         for scene in SCENARIOS:
@@ -107,7 +123,7 @@ class FlappyGame:
         ]
 
     def reset_run(self):
-        self.bird = Bird(220, SCREEN_HEIGHT // 2 - 40, self.bird_by_id(self.current_bird_id))
+        self.bird = Bird(220, SCREEN_HEIGHT // 2 - 40, self.bird_by_id(self.current_bird_id), self.current_outfit)
         self.pipes = []
         self.coins = []
         self.particles = []
@@ -194,6 +210,9 @@ class FlappyGame:
             self.current_bird_id = bird_id
             self.current_bird = bird
             self.menu_bird.bird_type = bird
+            self.menu_bird.outfit = self.current_outfit
+            self.loading_bird.bird_type = bird
+            self.loading_bird.outfit = self.current_outfit
             self.show_notice("Personagem selecionado!")
             save_state(self.save_data)
             return
@@ -204,10 +223,39 @@ class FlappyGame:
             self.current_bird_id = bird_id
             self.current_bird = bird
             self.menu_bird.bird_type = bird
+            self.menu_bird.outfit = self.current_outfit
+            self.loading_bird.bird_type = bird
+            self.loading_bird.outfit = self.current_outfit
             self.show_notice("Novo personagem desbloqueado!")
             save_state(self.save_data)
         else:
             self.show_notice("Moedas insuficientes.")
+
+    def buy_outfit(self, outfit_id):
+        outfit = self.outfit_by_id(outfit_id)
+        if outfit_id in self.save_data["unlocked_outfits"]:
+            self.save_data["selected_outfit"] = outfit_id
+            self.current_outfit_id = outfit_id
+            self.current_outfit = outfit
+            self.bird.outfit = outfit
+            self.menu_bird.outfit = outfit
+            self.loading_bird.outfit = outfit
+            self.show_notice(f"{outfit['name']} equipado!")
+            save_state(self.save_data)
+            return
+        if self.save_data["coins"] >= outfit["price"]:
+            self.save_data["coins"] -= outfit["price"]
+            self.save_data["unlocked_outfits"].append(outfit_id)
+            self.save_data["selected_outfit"] = outfit_id
+            self.current_outfit_id = outfit_id
+            self.current_outfit = outfit
+            self.bird.outfit = outfit
+            self.menu_bird.outfit = outfit
+            self.loading_bird.outfit = outfit
+            self.show_notice("Novo visual desbloqueado!")
+            save_state(self.save_data)
+        else:
+            self.show_notice("Moedas insuficientes para esse visual.")
 
     def buy_scene(self, scene_id):
         scene = self.scene_by_id(scene_id)
@@ -358,11 +406,25 @@ class FlappyGame:
             if pygame.Rect(50, 630, 180, 60).collidepoint(event.pos):
                 self.back_to_menu()
                 return
+            if pygame.Rect(100, 174, 170, 34).collidepoint(event.pos):
+                self.shop_category = "birds"
+                return
+            if pygame.Rect(278, 174, 190, 34).collidepoint(event.pos):
+                self.shop_category = "outfits"
+                return
             for card in self.shop_cards:
                 if card["rect"].collidepoint(event.pos):
-                    self.buy_bird(card["bird_id"])
-        if self.state == "shop" and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.back_to_menu()
+                    if "bird_id" in card:
+                        self.buy_bird(card["bird_id"])
+                    else:
+                        self.buy_outfit(card["outfit_id"])
+        if self.state == "shop" and event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.back_to_menu()
+            elif event.key == pygame.K_b:
+                self.shop_category = "birds"
+            elif event.key == pygame.K_o:
+                self.shop_category = "outfits"
 
         if self.state == "scenarios" and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if pygame.Rect(50, 630, 180, 60).collidepoint(event.pos):
@@ -757,20 +819,23 @@ class FlappyGame:
         self.screen.blit(text, text.get_rect(center=rect.center))
 
     def draw_shop(self):
-        self.draw_page_frame("LOJA DE PERSONAGENS", "Desbloqueie novos voos. Clique em um cartão para comprar ou selecionar.")
+        self.draw_page_frame("HANGAR & GUARDA-ROUPA", "Monte seu visual: escolha uma ave e equipe acessórios sem mudar a jogabilidade.")
+        tab_specs = (
+            ("birds", pygame.Rect(100, 174, 170, 34), "AVES"),
+            ("outfits", pygame.Rect(278, 174, 190, 34), "ROUPAS"),
+        )
+        for category, rect, label in tab_specs:
+            selected = category == self.shop_category
+            fill = (255, 207, 117) if selected else (29, 49, 68)
+            text_color = (25, 34, 48) if selected else (196, 218, 222)
+            pygame.draw.rect(self.screen, (9, 18, 31), rect.move(0, 3))
+            pygame.draw.rect(self.screen, fill, rect)
+            pygame.draw.rect(self.screen, (255, 226, 164) if selected else (83, 115, 132), rect, width=2)
+            tab_text = self.arcade_small_font.render(label, True, text_color)
+            self.screen.blit(tab_text, tab_text.get_rect(center=rect.center))
+
         self.shop_cards = []
-        x = 100
-        y = 190
-        for bird in BIRD_TYPES:
-            rect = pygame.Rect(x, y, 202, 190)
-            self.shop_cards.append({"bird_id": bird["id"], "rect": rect})
-            unlocked = bird["id"] in self.save_data["unlocked_birds"]
-            selected = bird["id"] == self.save_data["selected_bird"]
-            pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 5), border_radius=12)
-            pygame.draw.rect(self.screen, (31, 49, 70), rect, border_radius=12)
-            pygame.draw.rect(self.screen, bird["accent"], rect, width=2, border_radius=12)
-            if selected:
-                pygame.draw.rect(self.screen, (145, 216, 152), rect.inflate(-8, -8), width=2, border_radius=10)
+        if self.shop_category == "birds":
             rarity_colors = {
                 "Comum": (179, 205, 194),
                 "Raro": (119, 204, 255),
@@ -778,23 +843,53 @@ class FlappyGame:
                 "Lendário": (255, 190, 105),
                 "Mitológico": (255, 132, 190),
             }
-            rarity_color = rarity_colors.get(bird["rarity"], (220, 226, 218))
-            rarity = self.arcade_small_font.render(bird["rarity"].upper(), True, rarity_color)
-            rarity_rect = rarity.get_rect(midtop=(rect.centerx, y + 8))
-            self.screen.blit(rarity, rarity_rect)
-            Bird(x + 101, y + 54, bird).draw(self.screen, self.current_scene, scale=0.72)
-            label = self.small_font.render(bird["name"], True, (245, 245, 230))
-            self.screen.blit(label, label.get_rect(center=(rect.centerx, y + 108)))
-            price_text = self.arcade_small_font.render(
-                f"{bird['price']} MOEDAS" if not unlocked else ("EM USO" if selected else "DESBLOQUEADO"),
-                True,
-                (255, 215, 132) if not unlocked else ((164, 235, 169) if selected else (190, 215, 209)),
-            )
-            self.screen.blit(price_text, price_text.get_rect(center=(rect.centerx, y + 140)))
-            x += 218
-            if x + 202 > 1190:
-                x = 100
-                y += 205
+            for index, bird in enumerate(BIRD_TYPES):
+                column = index % 5
+                row = index // 5
+                x = 100 + column * 218
+                y = 218 + row * 186
+                rect = pygame.Rect(x, y, 202, 170)
+                self.shop_cards.append({"bird_id": bird["id"], "rect": rect})
+                unlocked = bird["id"] in self.save_data["unlocked_birds"]
+                selected = bird["id"] == self.save_data["selected_bird"]
+                pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 5), border_radius=12)
+                pygame.draw.rect(self.screen, (31, 49, 70), rect, border_radius=12)
+                pygame.draw.rect(self.screen, bird["accent"], rect, width=2, border_radius=12)
+                if selected:
+                    pygame.draw.rect(self.screen, (145, 216, 152), rect.inflate(-8, -8), width=2, border_radius=10)
+                rarity = self.arcade_small_font.render(bird["rarity"].upper(), True, rarity_colors.get(bird["rarity"], (220, 226, 218)))
+                self.screen.blit(rarity, rarity.get_rect(midtop=(rect.centerx, y + 7)))
+                Bird(rect.centerx, y + 61, bird, self.current_outfit).draw(self.screen, self.current_scene, scale=0.72)
+                label = self.small_font.render(bird["name"], True, (245, 245, 230))
+                self.screen.blit(label, label.get_rect(center=(rect.centerx, y + 111)))
+                status = f"{bird['price']} MOEDAS" if not unlocked else ("EM USO" if selected else "DESBLOQUEADO")
+                status_color = (255, 215, 132) if not unlocked else ((164, 235, 169) if selected else (190, 215, 209))
+                status_text = self.arcade_small_font.render(status, True, status_color)
+                self.screen.blit(status_text, status_text.get_rect(center=(rect.centerx, y + 145)))
+        else:
+            for index, outfit in enumerate(BIRD_OUTFITS):
+                column = index % 4
+                row = index // 4
+                x = 100 + column * 270
+                y = 218 + row * 186
+                rect = pygame.Rect(x, y, 250, 170)
+                self.shop_cards.append({"outfit_id": outfit["id"], "rect": rect})
+                unlocked = outfit["id"] in self.save_data["unlocked_outfits"]
+                selected = outfit["id"] == self.current_outfit_id
+                pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 5), border_radius=12)
+                pygame.draw.rect(self.screen, (31, 49, 70), rect, border_radius=12)
+                pygame.draw.rect(self.screen, outfit["color"], rect, width=2, border_radius=12)
+                if selected:
+                    pygame.draw.rect(self.screen, (145, 216, 152), rect.inflate(-8, -8), width=2, border_radius=10)
+                Bird(rect.centerx, y + 65, self.current_bird, outfit).draw(self.screen, self.current_scene, scale=1.0)
+                name = self.small_font.render(outfit["name"], True, (245, 245, 230))
+                self.screen.blit(name, name.get_rect(center=(rect.centerx, y + 113)))
+                description = self.arcade_small_font.render(outfit["description"], True, (176, 199, 205))
+                self.screen.blit(description, description.get_rect(center=(rect.centerx, y + 137)))
+                status = f"{outfit['price']} MOEDAS" if not unlocked else ("EQUIPADO" if selected else "DESBLOQUEADO")
+                status_color = (255, 215, 132) if not unlocked else ((164, 235, 169) if selected else (190, 215, 209))
+                status_text = self.arcade_small_font.render(status, True, status_color)
+                self.screen.blit(status_text, status_text.get_rect(center=(rect.centerx, y + 157)))
 
         self.draw_back_button()
 

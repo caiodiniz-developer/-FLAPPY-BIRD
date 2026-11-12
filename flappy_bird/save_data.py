@@ -10,8 +10,10 @@ def default_state():
         "high_score": 0,
         "selected_bird": "classic",
         "selected_scene": "classic",
+        "selected_outfit": "none",
         "unlocked_birds": ["classic"],
         "unlocked_scenes": ["classic"],
+        "unlocked_outfits": ["none"],
         "achievements": {},
         "settings": {
             "master_volume": 0.8,
@@ -60,6 +62,8 @@ def load_state():
         state["unlocked_birds"] = ["classic"]
     if "unlocked_scenes" not in loaded or not loaded.get("unlocked_scenes"):
         state["unlocked_scenes"] = ["classic"]
+    if "unlocked_outfits" not in loaded or not loaded.get("unlocked_outfits"):
+        state["unlocked_outfits"] = ["none"]
 
     return state
 

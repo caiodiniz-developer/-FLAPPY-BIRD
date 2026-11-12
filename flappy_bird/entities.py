@@ -7,12 +7,13 @@ from flappy_bird.config import JUMP_FORCE, PIPE_SPEED, SCREEN_HEIGHT, SCREEN_WID
 
 
 class Bird:
-    def __init__(self, x, y, bird_type):
+    def __init__(self, x, y, bird_type, outfit=None):
         self.x = x
         self.y = y
         self.velocity = 0.0
         self.radius = 22
         self.bird_type = bird_type
+        self.outfit = outfit
         self.alive = True
         self.frame = random.random() * 1000
 
@@ -131,6 +132,54 @@ class Bird:
         elif bird_id == "legend":
             pygame.draw.rect(sprite, (255, 232, 125), ((start_x + 7) * cell, (start_y + 1) * cell, cell, 3 * cell))
             pygame.draw.rect(sprite, (255, 232, 125), ((start_x + 5) * cell, (start_y + 3) * cell, 5 * cell, cell))
+
+        outfit = self.outfit or {}
+        style = outfit.get("style", "none")
+        outfit_color = outfit.get("color", (255, 220, 112))
+
+        def pixel_rect(x, y, width, height, color):
+            pygame.draw.rect(sprite, color, ((start_x + x) * cell, (start_y + y) * cell, width * cell, height * cell))
+
+        dark_trim = (38, 35, 48)
+        if style == "pilot":
+            pixel_rect(8, -1, 11, 4, dark_trim)
+            pixel_rect(9, -2, 8, 3, outfit_color)
+            pixel_rect(8, 1, 12, 1, outfit_color)
+            pixel_rect(12, -1, 2, 1, (255, 232, 147))
+            pixel_rect(16, 0, 1, 1, (255, 234, 151))
+        elif style == "bandana":
+            pixel_rect(8, 3, 10, 2, dark_trim)
+            pixel_rect(9, 3, 9, 1, outfit_color)
+            pixel_rect(18, 4, 3, 2, outfit_color)
+            pixel_rect(19, 6, 2, 2, dark_trim)
+            pixel_rect(19, 6, 1, 2, outfit_color)
+        elif style == "explorer":
+            pixel_rect(7, 1, 14, 2, dark_trim)
+            pixel_rect(8, 1, 12, 1, outfit_color)
+            pixel_rect(10, -2, 8, 4, dark_trim)
+            pixel_rect(11, -2, 6, 3, outfit_color)
+            pixel_rect(13, -1, 2, 1, (255, 223, 132))
+        elif style == "crown":
+            pixel_rect(10, -2, 9, 4, dark_trim)
+            pixel_rect(11, -2, 7, 3, outfit_color)
+            pixel_rect(10, -3, 2, 2, outfit_color)
+            pixel_rect(13, -4, 2, 3, outfit_color)
+            pixel_rect(17, -3, 2, 2, outfit_color)
+            pixel_rect(13, -1, 2, 1, (255, 246, 190))
+        elif style == "hero":
+            pixel_rect(3, 7, 4, 3, dark_trim)
+            pixel_rect(2, 8, 4, 3, outfit_color)
+            pixel_rect(5, 6, 3, 2, dark_trim)
+            pixel_rect(6, 6, 2, 1, outfit_color)
+            pixel_rect(4, 9, 2, 1, (255, 231, 145))
+        elif style == "space":
+            pixel_rect(8, 0, 12, 2, dark_trim)
+            pixel_rect(9, 0, 10, 1, outfit_color)
+            pixel_rect(10, -2, 8, 2, dark_trim)
+            pixel_rect(11, -2, 6, 1, (204, 252, 255))
+            pixel_rect(8, 2, 2, 3, outfit_color)
+            pixel_rect(19, 2, 2, 3, outfit_color)
+            pixel_rect(10, 2, 2, 1, (218, 253, 255))
 
         pitch = max(-2, min(2, int(self.velocity / 240)))
         sprite = pygame.transform.rotate(sprite, -pitch * 7)
