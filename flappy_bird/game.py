@@ -466,13 +466,13 @@ class FlappyGame:
         self.notice_timer = max(0.0, self.notice_timer - dt)
         if self.state == "loading":
             self.loading_elapsed += dt
-            self.loading_progress += dt * 0.45
+            self.loading_progress += dt
             if self.loading_progress >= 1.0 and self.loading_index < len(self.loading_steps):
                 self.loading_index += 1
                 self.loading_progress = 0.0
             progress = clamp((self.loading_index + self.loading_progress) / len(self.loading_steps), 0, 1)
-            self.loading_bird.x = 280 + progress * 700
-            self.loading_bird.y = 455 + math.sin(self.loading_elapsed * 4) * 12
+            self.loading_bird.x = 230 + progress * 820
+            self.loading_bird.y = 322 + math.sin(self.loading_elapsed * 4) * 14
             self.loading_bird.frame += dt * 14
             if self.loading_index >= len(self.loading_steps):
                 self.state = "menu"
@@ -1024,40 +1024,140 @@ class FlappyGame:
     def render_loading(self):
         self.draw_background(self.screen, self.current_scene)
         veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        veil.fill((22, 111, 130, 42))
+        veil.fill((7, 18, 33, 158))
         self.screen.blit(veil, (0, 0))
 
-        title_shadow = self.arcade_font.render("FLAPPY BIRD", True, (37, 63, 76))
-        title = self.arcade_font.render("FLAPPY BIRD", True, (255, 247, 215))
-        self.screen.blit(title_shadow, title_shadow.get_rect(center=(SCREEN_WIDTH // 2 + 4, 125)))
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 120)))
-        subtitle = self.small_font.render("UMA AVENTURA PIXEL A PIXEL", True, (255, 255, 238))
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 170)))
+        frame = pygame.Rect(54, 35, 1172, 650)
+        pygame.draw.rect(self.screen, (6, 14, 28), frame.move(0, 8))
+        pygame.draw.rect(self.screen, (15, 31, 49), frame)
+        pygame.draw.rect(self.screen, (255, 207, 117), frame, width=3)
+        pygame.draw.rect(self.screen, (255, 207, 117), (frame.x + 5, frame.y + 5, frame.width - 10, 7))
 
-        pipe = PipePair(930, 285, 190, width=82, speed=0)
+        emblem = pygame.Rect(91, 67, 44, 44)
+        pygame.draw.rect(self.screen, (255, 207, 117), emblem)
+        pygame.draw.rect(self.screen, (19, 38, 57), emblem.inflate(-6, -6))
+        pygame.draw.rect(self.screen, (7, 14, 26), (99, 79, 27, 19))
+        pygame.draw.rect(self.screen, (255, 209, 46), (101, 81, 22, 14))
+        pygame.draw.rect(self.screen, (255, 239, 191), (109, 82, 10, 4))
+        pygame.draw.rect(self.screen, (255, 245, 219), (115, 82, 6, 8))
+        pygame.draw.rect(self.screen, (22, 30, 45), (118, 85, 2, 4))
+        pygame.draw.rect(self.screen, (242, 101, 54), (122, 85, 5, 6))
+        pygame.draw.rect(self.screen, (255, 188, 58), (122, 83, 4, 3))
+        pygame.draw.rect(self.screen, (237, 130, 48), (105, 97, 6, 2))
+        pygame.draw.rect(self.screen, (237, 130, 48), (115, 97, 6, 2))
+        brand = self.arcade_small_font.render("FLAPPY / ARCADE", True, (255, 222, 147))
+        self.screen.blit(brand, (151, 68))
+        title = self.big_font.render("PREPARANDO A PARTIDA", True, (246, 249, 232))
+        self.screen.blit(title, (151, 88))
+
+        scene_badge = pygame.Rect(914, 66, 259, 44)
+        pygame.draw.rect(self.screen, (25, 47, 65), scene_badge)
+        pygame.draw.rect(self.screen, self.current_scene["accent"], scene_badge, width=2)
+        scene_label = self.arcade_small_font.render(f"MUNDO  /  {self.current_scene['name'].upper()}", True, (237, 241, 224))
+        self.screen.blit(scene_label, scene_label.get_rect(center=scene_badge.center))
+
+        viewport = pygame.Rect(91, 142, 1098, 334)
+        pygame.draw.rect(self.screen, (5, 13, 26), viewport.inflate(12, 12))
+        pygame.draw.rect(self.screen, (102, 143, 151), viewport.inflate(4, 4), width=2)
+        self.screen.set_clip(viewport)
+
+        for row in range(viewport.height):
+            blend = row / max(1, viewport.height)
+            color = tuple(
+                round(lerp(self.current_scene["sky_top"][channel], self.current_scene["sky_bottom"][channel], blend))
+                for channel in range(3)
+            )
+            pygame.draw.line(self.screen, color, (viewport.left, viewport.top + row), (viewport.right, viewport.top + row))
+
+        if self.current_scene["theme"] in ("night", "space"):
+            for index, (star_x, star_y, radius) in enumerate(self.stars):
+                if star_y < viewport.height * 0.78:
+                    twinkle = int((math.sin(self.loading_elapsed * 3 + index) + 1) * 35)
+                    pygame.draw.rect(self.screen, (min(255, 185 + twinkle), min(255, 207 + twinkle), 255), (viewport.left + star_x % viewport.width, viewport.top + star_y % 220, radius + 1, radius + 1))
+
+        drift = int(self.loading_elapsed * 16) % 260
+        cloud_fill = self.current_scene["cloud"]
+        for index, cloud_x in enumerate(range(-100, viewport.width + 260, 260)):
+            x = viewport.left + cloud_x - drift
+            y = viewport.top + 52 + (index % 2) * 35
+            pygame.draw.rect(self.screen, tuple(max(0, channel - 25) for channel in cloud_fill), (x, y + 20, 118, 18))
+            pygame.draw.rect(self.screen, cloud_fill, (x + 18, y + 10, 80, 28))
+            pygame.draw.rect(self.screen, cloud_fill, (x + 37, y, 44, 18))
+
+        pygame.draw.polygon(self.screen, self.current_scene["mountain_a"], [
+            (viewport.left, viewport.top + 264), (viewport.left, viewport.top + 220),
+            (viewport.left + 145, viewport.top + 166), (viewport.left + 260, viewport.top + 231),
+            (viewport.left + 390, viewport.top + 180), (viewport.left + 535, viewport.top + 248),
+            (viewport.left + 700, viewport.top + 171), (viewport.left + 850, viewport.top + 238),
+            (viewport.right, viewport.top + 184), (viewport.right, viewport.bottom),
+            (viewport.left, viewport.bottom),
+        ])
+        pygame.draw.polygon(self.screen, self.current_scene["mountain_b"], [
+            (viewport.left, viewport.top + 284), (viewport.left + 190, viewport.top + 244),
+            (viewport.left + 355, viewport.top + 275), (viewport.left + 520, viewport.top + 225),
+            (viewport.left + 700, viewport.top + 278), (viewport.left + 890, viewport.top + 236),
+            (viewport.right, viewport.top + 271), (viewport.right, viewport.bottom),
+            (viewport.left, viewport.bottom),
+        ])
+
+        ground_y = viewport.top + 282
+        pygame.draw.rect(self.screen, (35, 58, 68), (viewport.left, ground_y, viewport.width, 56))
+        pygame.draw.rect(self.screen, self.current_scene["accent"], (viewport.left, ground_y, viewport.width, 5))
+        for tile_x in range(viewport.left + 8, viewport.right, 42):
+            pygame.draw.rect(self.screen, (53, 78, 83), (tile_x, ground_y + 18, 22, 7))
+            pygame.draw.rect(self.screen, (53, 78, 83), (tile_x + 19, ground_y + 34, 22, 7))
+
+        # A dotted flight route links the moving pilot to the gap and coin.
+        route_y = viewport.top + 190
+        for route_x in range(viewport.left + 90, viewport.right - 45, 28):
+            pygame.draw.rect(self.screen, (228, 230, 185), (route_x, route_y, 9, 3))
+
+        pipe = PipePair(viewport.left + 755, viewport.top + 112, 150, width=78, speed=0)
         pipe.draw(self.screen, self.current_scene)
+        draw_coin_icon(self.screen, (viewport.left + 720, viewport.top + 188), self.loading_elapsed * 5, radius=10)
+        draw_coin_icon(self.screen, (viewport.left + 760, viewport.top + 188), self.loading_elapsed * 5, radius=10)
+        pygame.draw.circle(self.screen, (255, 236, 154), (round(self.loading_bird.x), round(self.loading_bird.y)), 29, width=1)
+        pygame.draw.circle(self.screen, (255, 236, 154), (round(self.loading_bird.x), round(self.loading_bird.y)), 34, width=1)
         self.loading_bird.draw(self.screen, self.current_scene, scale=1.2)
+        self.screen.set_clip(None)
 
-        card = pygame.Surface((760, 112), pygame.SRCALPHA)
-        card.fill((15, 42, 62, 224))
-        self.screen.blit(card, (260, 530))
-        pygame.draw.rect(self.screen, (47, 64, 75), (260, 530, 760, 112), width=4)
-        pygame.draw.rect(self.screen, (255, 235, 169), (268, 538, 744, 4))
+        route_label = self.arcade_small_font.render("ROTA DE VOO  /  COLETE MOEDAS  /  EVITE OS CANOS", True, (194, 215, 213))
+        self.screen.blit(route_label, (101, 493))
+        phase = min(self.loading_index, len(self.loading_steps) - 1)
+        phase_label = self.arcade_small_font.render(f"FASE {phase + 1:02d} / {len(self.loading_steps):02d}", True, (255, 220, 137))
+        self.screen.blit(phase_label, phase_label.get_rect(topright=(1174, 493)))
 
-        progress_rect = pygame.Rect(310, 566, 640, 18)
+        card = pygame.Rect(91, 520, 1098, 128)
+        pygame.draw.rect(self.screen, (7, 17, 31), card.move(0, 5))
+        pygame.draw.rect(self.screen, (21, 40, 58), card)
+        pygame.draw.rect(self.screen, (78, 113, 127), card, width=2)
+
         progress = clamp((self.loading_index + self.loading_progress) / len(self.loading_steps), 0, 1)
-        pygame.draw.rect(self.screen, (14, 25, 42), progress_rect)
-        pygame.draw.rect(self.screen, (244, 249, 218), progress_rect, width=2)
-        fill_width = max(0, min(progress_rect.width - 4, int(progress * (progress_rect.width - 4))))
-        if fill_width:
-            pygame.draw.rect(self.screen, (88, 232, 103), (progress_rect.x + 2, progress_rect.y + 2, fill_width, progress_rect.height - 4))
-            pygame.draw.rect(self.screen, (201, 255, 172), (progress_rect.x + 2, progress_rect.y + 2, fill_width, 4))
-
         message = self.loading_steps[min(self.loading_index, len(self.loading_steps) - 1)]
-        msg = self.small_font.render(message, True, (239, 248, 229))
-        self.screen.blit(msg, msg.get_rect(midleft=(310, 610)))
-        percentage = self.arcade_small_font.render(f"{int(progress * 100)}%", True, (255, 230, 151))
-        self.screen.blit(percentage, percentage.get_rect(midright=(950, 610)))
+        message_surface = self.small_font.render(message.upper(), True, (244, 247, 232))
+        self.screen.blit(message_surface, (117, 535))
+        percentage = self.arcade_font.render(f"{int(progress * 100):02d}%", True, (255, 224, 144))
+        self.screen.blit(percentage, percentage.get_rect(topright=(1158, 522)))
+
+        segment_width = 184
+        segment_gap = 24
+        segment_y = 572
+        phase_names = ("BOOT", "MUNDO", "PILOTO", "SAVE", "GO!")
+        for index, phase_name in enumerate(phase_names):
+            x = 117 + index * (segment_width + segment_gap)
+            segment = pygame.Rect(x, segment_y, segment_width, 13)
+            pygame.draw.rect(self.screen, (7, 17, 31), segment)
+            fill_ratio = clamp(progress * len(phase_names) - index, 0, 1)
+            fill_width = round((segment.width - 4) * fill_ratio)
+            if fill_width:
+                pygame.draw.rect(self.screen, self.current_scene["accent"], (segment.x + 2, segment.y + 2, fill_width, segment.height - 4))
+                pygame.draw.rect(self.screen, (255, 244, 200), (segment.x + 2, segment.y + 2, fill_width, 2))
+            label_color = (255, 224, 144) if index <= self.loading_index else (128, 155, 166)
+            label = self.arcade_small_font.render(phase_name, True, label_color)
+            self.screen.blit(label, label.get_rect(midtop=(segment.centerx, 592)))
+
+        tip = self.arcade_small_font.render("DICA  /  PASSE PELO CENTRO DO VÃO PARA GANHAR MOEDA EXTRA", True, (167, 200, 195))
+        self.screen.blit(tip, tip.get_rect(center=(640, 627)))
 
     def run(self):
         while self.running:
