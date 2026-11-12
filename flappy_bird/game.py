@@ -1,6 +1,5 @@
 import math
 import random
-from typing import Iterable
 
 import pygame
 
@@ -20,6 +19,14 @@ from flappy_bird.entities import Bird, Button, Coin, Particle, PipePair
 from flappy_bird.save_data import load_state, save_state
 
 
+DIFFICULTY_PRESETS = {
+    "easy": {"label": "LEVE", "gap": 218, "speed": 230},
+    "normal": {"label": "NORMAL", "gap": PIPE_GAP, "speed": 280},
+    "hard": {"label": "DESAFIO", "gap": 150, "speed": 330},
+}
+FPS_PRESETS = (30, 60, 120, 0)
+
+
 class FlappyGame:
     def __init__(self):
         pygame.init()
@@ -32,7 +39,10 @@ class FlappyGame:
         self.current_bird_id = self.save_data["selected_bird"]
         self.current_scene = self.scene_by_id(self.current_scene_id)
         self.current_bird = self.bird_by_id(self.current_bird_id)
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        display_flags = pygame.SCALED | pygame.RESIZABLE
+        if self.save_data["settings"].get("fullscreen", False):
+            display_flags |= pygame.FULLSCREEN
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), display_flags)
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 52, bold=True)
         self.small_font = pygame.font.SysFont("Arial", 22)
@@ -50,9 +60,22 @@ class FlappyGame:
         self.menu_buttons = []
         self.shop_cards = []
         self.scenario_cards = []
+        self.settings_controls = {}
+        self.pause_buttons = []
+        self.game_over_buttons = []
         self.game_over_notification = ""
         self.warning_message = ""
+        self.notice_message = ""
+        self.notice_timer = 0.0
         self.transition_alpha = 0
+        self.paused_from = "playing"
+        self.settings_return_state = "menu"
+        self.dragging_setting = None
+        self.background_cache = {}
+        self.stars = [
+            (random.randrange(18, SCREEN_WIDTH - 18), random.randrange(18, SCREEN_HEIGHT // 2), random.choice((1, 1, 2)))
+            for _ in range(90)
+        ]
 
         self.reset_run()
         self.menu_bird = Bird(900, 375, self.bird_by_id(self.current_bird_id))
@@ -87,6 +110,8 @@ class FlappyGame:
         self.particles = []
         self.score = 0
         self.round_coins = 0
+        self.streak = 0
+        self.best_streak = 0
         self.pipe_timer = 0.0
         self.sound_timer = 0.0
         self.started = False
@@ -108,10 +133,51 @@ class FlappyGame:
         self.state = "scenarios"
 
     def open_settings(self):
+        self.settings_return_state = self.state
         self.state = "settings"
 
     def back_to_menu(self):
         self.state = "menu"
+
+    def back_from_settings(self):
+        self.state = self.settings_return_state
+
+    def show_notice(self, message):
+        self.notice_message = message
+        self.notice_timer = 2.0
+
+    def resume_game(self):
+        self.state = self.paused_from
+
+    def pause_game(self):
+        if self.state == "playing":
+            self.paused_from = "playing"
+            self.state = "paused"
+
+    def toggle_fullscreen(self):
+        settings = self.save_data["settings"]
+        previous = settings.get("fullscreen", False)
+        settings["fullscreen"] = not previous
+        flags = pygame.SCALED | pygame.RESIZABLE
+        if settings["fullscreen"]:
+            flags |= pygame.FULLSCREEN
+        try:
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
+        except pygame.error as error:
+            settings["fullscreen"] = previous
+            self.show_notice("Não foi possível alterar o modo de tela.")
+            print(f"Fullscreen toggle failed: {error}")
+            return
+        save_state(self.save_data)
+
+    def cycle_setting(self, setting, values):
+        current = self.save_data["settings"].get(setting, values[0])
+        try:
+            index = values.index(current)
+        except ValueError:
+            index = 0
+        self.save_data["settings"][setting] = values[(index + 1) % len(values)]
+        save_state(self.save_data)
 
     def restart_game(self):
         self.start_game()
@@ -123,6 +189,7 @@ class FlappyGame:
             self.current_bird_id = bird_id
             self.current_bird = bird
             self.menu_bird.bird_type = bird
+            self.show_notice("Personagem selecionado!")
             save_state(self.save_data)
             return
         if self.save_data["coins"] >= bird["price"]:
@@ -132,7 +199,10 @@ class FlappyGame:
             self.current_bird_id = bird_id
             self.current_bird = bird
             self.menu_bird.bird_type = bird
+            self.show_notice("Novo personagem desbloqueado!")
             save_state(self.save_data)
+        else:
+            self.show_notice("Moedas insuficientes.")
 
     def buy_scene(self, scene_id):
         scene = self.scene_by_id(scene_id)
@@ -140,6 +210,7 @@ class FlappyGame:
             self.save_data["selected_scene"] = scene_id
             self.current_scene_id = scene_id
             self.current_scene = scene
+            self.show_notice("Cenário selecionado!")
             save_state(self.save_data)
             return
         if self.save_data["coins"] >= scene["price"]:
@@ -148,7 +219,10 @@ class FlappyGame:
             self.save_data["selected_scene"] = scene_id
             self.current_scene_id = scene_id
             self.current_scene = scene
+            self.show_notice("Novo cenário desbloqueado!")
             save_state(self.save_data)
+        else:
+            self.show_notice("Moedas insuficientes.")
 
     def save_current_progress(self):
         self.save_data["selected_bird"] = self.current_bird_id
@@ -157,7 +231,9 @@ class FlappyGame:
 
     def spawn_pipe(self):
         gap_y = random.randint(140, SCREEN_HEIGHT - 220)
-        self.pipes.append(PipePair(SCREEN_WIDTH + 80, gap_y, PIPE_GAP))
+        preset = DIFFICULTY_PRESETS.get(self.save_data["settings"].get("difficulty"), DIFFICULTY_PRESETS["normal"])
+        speed = preset["speed"] + min(self.score * 3, 120)
+        self.pipes.append(PipePair(SCREEN_WIDTH + 80, gap_y, preset["gap"], speed=speed))
         coin_y = gap_y + PIPE_GAP / 2
         self.coins.append(Coin(SCREEN_WIDTH + 80 + 30, coin_y))
 
@@ -168,6 +244,8 @@ class FlappyGame:
                 self.particles.remove(particle)
 
     def add_particles(self, x, y, color):
+        if not self.save_data["settings"].get("particles_enabled", True):
+            return
         for _ in range(16):
             self.particles.append(Particle(x, y, color, 1.0))
 
@@ -206,8 +284,13 @@ class FlappyGame:
             if not pipe.scored and pipe.x + pipe.width < self.bird.x:
                 pipe.scored = True
                 self.score += 1
+                self.streak += 1
+                self.best_streak = max(self.best_streak, self.streak)
                 self.save_data["stats"]["total_obstacles_passed"] += 1
                 self.add_particles(self.bird.x, 100, self.current_scene["accent"])
+                if self.streak % 5 == 0:
+                    self.round_coins += 2
+                    self.add_particles(self.bird.x, 142, (255, 214, 100))
 
         self.update_particles(dt)
 
@@ -219,13 +302,14 @@ class FlappyGame:
             self.finish_round()
 
     def finish_round(self):
+        previous_best = self.save_data["high_score"]
         self.save_data["high_score"] = max(self.save_data["high_score"], self.score)
         self.save_data["coins"] += self.round_coins
         self.save_data["stats"]["games_played"] += 1
         self.save_data["stats"]["total_coins_earned"] += self.round_coins
         self.save_data["stats"]["scenes_played"][self.current_scene_id] = self.save_data["stats"].get("scenes_played", {}).get(self.current_scene_id, 0) + 1
         self.game_over_notification = f"Pontuação: {self.score} | Moedas: {self.round_coins}"
-        self.warning_message = "Novo recorde!" if self.score >= self.save_data["high_score"] else ""
+        self.warning_message = "NOVO RECORDE!" if self.score > previous_best else ""
         reward_notifications = evaluate_achievements(self.save_data)
         if reward_notifications:
             self.warning_message = "Conquista desbloqueada!"
@@ -238,37 +322,132 @@ class FlappyGame:
         if self.state == "loading":
             return
 
-        if self.state in {"menu", "shop", "achievements", "scenarios", "settings"}:
+        if self.state == "menu":
             for button in self.menu_buttons:
                 button.handle_event(event)
 
-        if self.state == "shop" and event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    self.start_game()
+                elif event.key == pygame.K_s:
+                    self.open_shop()
+                elif event.key == pygame.K_a:
+                    self.open_achievements()
+                elif event.key == pygame.K_c:
+                    self.open_scenarios()
+                elif event.key == pygame.K_o:
+                    self.open_settings()
+
+        if self.state == "shop" and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if pygame.Rect(50, 630, 180, 60).collidepoint(event.pos):
+                self.back_to_menu()
+                return
             for card in self.shop_cards:
                 if card["rect"].collidepoint(event.pos):
-                    if event.button == 1:
-                        self.buy_bird(card["bird_id"])
+                    self.buy_bird(card["bird_id"])
+        if self.state == "shop" and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.back_to_menu()
 
-        if self.state == "scenarios" and event.type == pygame.MOUSEBUTTONDOWN:
+        if self.state == "scenarios" and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if pygame.Rect(50, 630, 180, 60).collidepoint(event.pos):
+                self.back_to_menu()
+                return
             for card in self.scenario_cards:
                 if card["rect"].collidepoint(event.pos):
-                    if event.button == 1:
-                        self.buy_scene(card["scene_id"])
+                    self.buy_scene(card["scene_id"])
+        if self.state == "scenarios" and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.back_to_menu()
 
         if self.state == "playing":
-            if event.type == pygame.KEYDOWN and event.key in {pygame.K_SPACE, pygame.K_w, pygame.K_UP}:
-                self.bird.jump()
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                self.bird.jump()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.state = "menu"
+                self.pause_game()
+                return
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+                self.pause_game()
+                return
+            elif event.type == pygame.KEYDOWN and event.key in {pygame.K_SPACE, pygame.K_w, pygame.K_UP}:
+                self.bird.jump()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if pygame.Rect(1156, 18, 88, 42).collidepoint(event.pos):
+                    self.pause_game()
+                    return
+                else:
+                    self.bird.jump()
+
+        if self.state == "paused":
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
+                    self.resume_game()
+                elif event.key == pygame.K_r:
+                    self.start_game()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for button in self.pause_buttons:
+                    if button.rect.collidepoint(event.pos):
+                        button.handle_event(event)
+                        return
+
+        if self.state == "settings":
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.state = self.settings_return_state
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if pygame.Rect(50, 630, 180, 60).collidepoint(event.pos):
+                    self.state = self.settings_return_state
+                    return
+
+                x, y = event.pos
+                volume_rows = {
+                    184: "master_volume",
+                    254: "music_volume",
+                    324: "sfx_volume",
+                }
+                for row_y, setting in volume_rows.items():
+                    if 475 <= x <= 1000 and row_y - 20 <= y <= row_y + 24:
+                        self.save_data["settings"][setting] = round(clamp((x - 500) / 460, 0, 1), 1)
+                        self.dragging_setting = setting
+                        save_state(self.save_data)
+                        return
+                if pygame.Rect(470, 385, 530, 48).collidepoint(event.pos):
+                    self.cycle_setting("difficulty", ("easy", "normal", "hard"))
+                elif pygame.Rect(470, 455, 530, 48).collidepoint(event.pos):
+                    self.cycle_setting("fps_limit", FPS_PRESETS)
+                elif pygame.Rect(470, 520, 530, 48).collidepoint(event.pos):
+                    self.toggle_fullscreen()
+                elif pygame.Rect(470, 580, 530, 44).collidepoint(event.pos):
+                    self.save_data["settings"]["particles_enabled"] = not self.save_data["settings"].get("particles_enabled", True)
+                    save_state(self.save_data)
+            elif event.type == pygame.MOUSEMOTION and self.dragging_setting:
+                x, y = event.pos
+                row_positions = {
+                    184: "master_volume",
+                    254: "music_volume",
+                    324: "sfx_volume",
+                }
+                for row_y, setting in row_positions.items():
+                    if setting == self.dragging_setting and row_y - 20 <= y <= row_y + 24:
+                        self.save_data["settings"][setting] = round(clamp((x - 500) / 460, 0, 1), 1)
+                        break
+            elif event.type == pygame.MOUSEBUTTONUP and self.dragging_setting:
+                save_state(self.save_data)
+                self.dragging_setting = None
 
         if self.state == "game_over":
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                self.start_game()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    self.start_game()
+                elif event.key == pygame.K_ESCAPE:
+                    self.back_to_menu()
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                self.start_game()
+                for button in self.game_over_buttons:
+                    button.handle_event(event)
+
+        if self.state == "achievements":
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.back_to_menu()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and pygame.Rect(50, 630, 180, 60).collidepoint(event.pos):
+                self.back_to_menu()
 
     def update(self, dt):
+        self.notice_timer = max(0.0, self.notice_timer - dt)
         if self.state == "loading":
             self.loading_progress += dt * 0.45
             if self.loading_progress >= 1.0 and self.loading_index < len(self.loading_steps):
@@ -293,27 +472,27 @@ class FlappyGame:
             self.menu_bird.y = 375 + math.sin(self.menu_elapsed * 2.2) * 10
 
     def draw_background(self, surface, scene):
-        gradient = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        for i in range(SCREEN_HEIGHT):
-            t = i / SCREEN_HEIGHT
-            color = (
-                int(lerp(scene["sky_top"][0], scene["sky_bottom"][0], t)),
-                int(lerp(scene["sky_top"][1], scene["sky_bottom"][1], t)),
-                int(lerp(scene["sky_top"][2], scene["sky_bottom"][2], t)),
-            )
-            pygame.draw.line(gradient, color, (0, i), (SCREEN_WIDTH, i))
+        scene_id = scene["id"]
+        gradient = self.background_cache.get(scene_id)
+        if gradient is None:
+            gradient = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            for i in range(SCREEN_HEIGHT):
+                t = i / SCREEN_HEIGHT
+                color = (
+                    int(lerp(scene["sky_top"][0], scene["sky_bottom"][0], t)),
+                    int(lerp(scene["sky_top"][1], scene["sky_bottom"][1], t)),
+                    int(lerp(scene["sky_top"][2], scene["sky_bottom"][2], t)),
+                )
+                pygame.draw.line(gradient, color, (0, i), (SCREEN_WIDTH, i))
+            self.background_cache[scene_id] = gradient
         surface.blit(gradient, (0, 0))
 
         if scene["theme"] == "night":
-            for _ in range(40):
-                x = random.randint(20, SCREEN_WIDTH - 20)
-                y = random.randint(20, SCREEN_HEIGHT // 2)
-                pygame.draw.circle(surface, (255, 255, 255), (x, y), 2)
+            for x, y, radius in self.stars[:40]:
+                pygame.draw.circle(surface, (255, 255, 255), (x, y), radius)
         elif scene["theme"] == "space":
-            for _ in range(60):
-                x = random.randint(20, SCREEN_WIDTH - 20)
-                y = random.randint(20, SCREEN_HEIGHT // 2)
-                pygame.draw.circle(surface, (255, 255, 255), (x, y), 2)
+            for x, y, radius in self.stars:
+                pygame.draw.circle(surface, (255, 255, 255), (x, y), radius)
             pygame.draw.circle(surface, (240, 200, 130), (1030, 120), 35)
             pygame.draw.circle(surface, (160, 140, 255), (900, 170), 18)
 
@@ -447,105 +626,187 @@ class FlappyGame:
         footer = self.arcade_small_font.render("PRESS START  •  FLY YOUR WAY", True, (48, 95, 72))
         self.screen.blit(footer, footer.get_rect(center=(910, 635)))
 
-    def draw_shop(self):
+    def draw_page_frame(self, title, subtitle):
         self.draw_background(self.screen, self.current_scene)
-        title = self.big_font.render("LOJA", True, (255, 255, 255))
-        self.screen.blit(title, (560, 80))
+        panel = pygame.Surface((1160, 620), pygame.SRCALPHA)
+        panel.fill((17, 29, 49, 226))
+        self.screen.blit(panel, (60, 35))
+        pygame.draw.rect(self.screen, (16, 23, 40), (54, 29, 1172, 632), width=5)
+        pygame.draw.rect(self.screen, (255, 207, 117), (62, 37, 1156, 616), width=2)
+        pygame.draw.rect(self.screen, (255, 207, 117), (62, 37, 1156, 7))
+
+        title_surface = self.big_font.render(title, True, (255, 226, 164))
+        self.screen.blit(title_surface, (100, 68))
+        subtitle_surface = self.small_font.render(subtitle, True, (196, 218, 222))
+        self.screen.blit(subtitle_surface, (102, 127))
+
+        wallet = self.arcade_small_font.render(f"MOEDAS  {self.save_data['coins']}", True, (255, 224, 146))
+        wallet_rect = wallet.get_rect(topright=(1170, 79))
+        self.screen.blit(wallet, wallet_rect)
+        pygame.draw.line(self.screen, (255, 207, 117), (100, 165), (1180, 165), 2)
+
+    def draw_back_button(self, action=None):
+        action = action or self.back_to_menu
+        Button(84, 635, 160, 42, "VOLTAR", action, accent=(221, 130, 113), text_color=(35, 28, 38)).draw(
+            self.screen, self.arcade_small_font
+        )
+
+    def draw_notice(self):
+        if self.notice_timer <= 0 or not self.notice_message:
+            return
+        rect = pygame.Rect(430, 648, 420, 42)
+        pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 4), border_radius=8)
+        pygame.draw.rect(self.screen, (31, 57, 68), rect, border_radius=8)
+        pygame.draw.rect(self.screen, (255, 207, 117), rect, width=2, border_radius=8)
+        text = self.arcade_small_font.render(self.notice_message, True, (255, 234, 185))
+        self.screen.blit(text, text.get_rect(center=rect.center))
+
+    def draw_shop(self):
+        self.draw_page_frame("LOJA DE PERSONAGENS", "Desbloqueie novos voos. Clique em um cartão para comprar ou selecionar.")
         self.shop_cards = []
-        x = 120
-        y = 180
+        x = 100
+        y = 190
         for bird in BIRD_TYPES:
-            rect = pygame.Rect(x, y, 180, 210)
+            rect = pygame.Rect(x, y, 202, 190)
             self.shop_cards.append({"bird_id": bird["id"], "rect": rect})
             unlocked = bird["id"] in self.save_data["unlocked_birds"]
             selected = bird["id"] == self.save_data["selected_bird"]
-            pygame.draw.rect(self.screen, (27, 39, 58), rect, border_radius=22)
-            pygame.draw.rect(self.screen, (255, 255, 255, 100), rect.inflate(-8, -8), border_radius=18, width=2)
-            Bird(x + 90, y + 72, bird).draw(self.screen, self.current_scene, scale=0.9)
-            label = self.small_font.render(bird["name"], True, (255, 255, 255))
-            self.screen.blit(label, (x + 16, y + 120))
-            price_text = self.small_font.render(f"{bird['price']} moedas" if not unlocked else "Comprado", True, (255, 210, 110))
-            self.screen.blit(price_text, (x + 16, y + 150))
+            pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 5), border_radius=12)
+            pygame.draw.rect(self.screen, (31, 49, 70), rect, border_radius=12)
+            pygame.draw.rect(self.screen, bird["accent"], rect, width=2, border_radius=12)
             if selected:
-                pygame.draw.rect(self.screen, (120, 255, 150), rect.inflate(-18, -18), width=3, border_radius=18)
-            button_label = "SELECIONAR" if unlocked else "COMPRAR"
-            btn = Button(x + 18, y + 175, 144, 26, button_label, lambda bid=bird["id"]: self.buy_bird(bid), accent=(120, 220, 115) if unlocked else (255, 212, 90))
-            btn.draw(self.screen, self.small_font)
-            x += 210
-            if x > 1000:
-                x = 120
-                y += 250
+                pygame.draw.rect(self.screen, (145, 216, 152), rect.inflate(-8, -8), width=2, border_radius=10)
+            Bird(x + 101, y + 54, bird).draw(self.screen, self.current_scene, scale=0.72)
+            label = self.small_font.render(bird["name"], True, (245, 245, 230))
+            self.screen.blit(label, label.get_rect(center=(rect.centerx, y + 108)))
+            price_text = self.arcade_small_font.render(f"{bird['price']} moedas" if not unlocked else ("EQUIPADO" if selected else "DESBLOQUEADO"), True, (255, 215, 132))
+            self.screen.blit(price_text, price_text.get_rect(center=(rect.centerx, y + 140)))
+            if selected:
+                status = self.arcade_small_font.render("EM USO", True, (164, 235, 169))
+                self.screen.blit(status, status.get_rect(center=(rect.centerx, y + 170)))
+            x += 218
+            if x + 202 > 1190:
+                x = 100
+                y += 205
 
-        back_button = Button(50, 640, 160, 40, "VOLTAR", self.back_to_menu, accent=(255, 144, 144))
-        back_button.draw(self.screen, self.small_font)
-        coin_display = self.small_font.render(f"Moedas: {self.save_data['coins']}", True, (255, 255, 255))
-        self.screen.blit(coin_display, (1040, 80))
+        self.draw_back_button()
 
     def draw_achievements(self):
-        self.draw_background(self.screen, self.current_scene)
-        title = self.big_font.render("CONQUISTAS", True, (255, 255, 255))
-        self.screen.blit(title, (470, 80))
-        y = 170
-        for item in ACHIEVEMENTS:
+        self.draw_page_frame("CONQUISTAS", "Complete objetivos em suas partidas para receber moedas de recompensa.")
+        for index, item in enumerate(ACHIEVEMENTS):
+            column = index // 5
+            row = index % 5
+            x = 96 + column * 548
+            y = 185 + row * 84
+            rect = pygame.Rect(x, y, 520, 72)
             unlocked = self.save_data["achievements"].get(item["id"], {}).get("unlocked", False)
-            color = (70, 180, 120) if unlocked else (70, 90, 110)
-            pygame.draw.rect(self.screen, color, (80, y, 1120, 50), border_radius=12)
-            text = self.font.render(item["name"], True, (255, 255, 255))
-            self.screen.blit(text, (110, y + 12))
-            desc = self.small_font.render(item["description"], True, (230, 230, 230))
-            self.screen.blit(desc, (500, y + 16))
-            y += 60
+            data = self.save_data["achievements"].get(item["id"], {})
+            progress = min(item["requirement"], data.get("progress", 0))
+            progress_ratio = progress / max(1, item["requirement"])
+            card_color = (38, 67, 68) if unlocked else (31, 47, 66)
+            pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 4), border_radius=10)
+            pygame.draw.rect(self.screen, card_color, rect, border_radius=10)
+            pygame.draw.rect(self.screen, (142, 210, 145) if unlocked else (86, 118, 144), rect, width=2, border_radius=10)
+            name = self.small_font.render(item["name"], True, (250, 238, 204))
+            desc = self.arcade_small_font.render(item["description"], True, (196, 218, 222))
+            self.screen.blit(name, (x + 16, y + 9))
+            self.screen.blit(desc, (x + 16, y + 37))
+            reward = self.arcade_small_font.render(f"+{item['reward']} COINS", True, (255, 215, 132))
+            self.screen.blit(reward, reward.get_rect(topright=(rect.right - 14, y + 10)))
+            bar = pygame.Rect(x + 16, y + 62, 488, 5)
+            pygame.draw.rect(self.screen, (15, 25, 39), bar, border_radius=3)
+            if progress_ratio:
+                pygame.draw.rect(self.screen, (137, 217, 153), (bar.x, bar.y, max(5, int(bar.width * progress_ratio)), bar.height), border_radius=3)
 
-        back_button = Button(50, 640, 160, 40, "VOLTAR", self.back_to_menu, accent=(255, 144, 144))
-        back_button.draw(self.screen, self.small_font)
+        self.draw_back_button()
 
     def draw_scenarios(self):
-        self.draw_background(self.screen, self.current_scene)
-        title = self.big_font.render("CENÁRIOS", True, (255, 255, 255))
-        self.screen.blit(title, (500, 80))
+        self.draw_page_frame("CENÁRIOS", "Escolha onde a próxima aventura vai acontecer.")
         self.scenario_cards = []
-        x = 120
-        y = 180
-        for scene in SCENARIOS:
-            rect = pygame.Rect(x, y, 220, 180)
+        for index, scene in enumerate(SCENARIOS):
+            column = index % 4
+            row = index // 4
+            x = 100 + column * 270
+            y = 190 + row * 205
+            rect = pygame.Rect(x, y, 250, 188)
             self.scenario_cards.append({"scene_id": scene["id"], "rect": rect})
             unlocked = scene["id"] in self.save_data["unlocked_scenes"]
             selected = scene["id"] == self.save_data["selected_scene"]
-            pygame.draw.rect(self.screen, (22, 37, 59), rect, border_radius=18)
-            pygame.draw.rect(self.screen, scene["accent"], rect.inflate(-15, -15), border_radius=12, width=2)
-            label = self.small_font.render(scene["name"], True, (255, 255, 255))
-            self.screen.blit(label, (x + 18, y + 18))
-            if not unlocked:
-                price = self.small_font.render(f"{scene['price']} moedas", True, (255, 214, 110))
-                self.screen.blit(price, (x + 18, y + 120))
+            pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 5), border_radius=12)
+            pygame.draw.rect(self.screen, (28, 44, 64), rect, border_radius=12)
+            pygame.draw.rect(self.screen, scene["accent"], rect, width=2, border_radius=12)
+            preview = pygame.Rect(x + 12, y + 12, 226, 86)
+            pygame.draw.rect(self.screen, scene["sky_top"], preview)
+            pygame.draw.rect(self.screen, scene["sky_bottom"], (preview.x, preview.y + 43, preview.width, 43))
+            pygame.draw.circle(self.screen, scene["accent"], (preview.right - 30, preview.y + 24), 13)
+            pygame.draw.polygon(self.screen, scene["mountain_a"], [(preview.x, preview.bottom), (preview.x + 62, preview.y + 48), (preview.x + 112, preview.bottom), (preview.x + 162, preview.y + 52), (preview.right, preview.bottom)])
+            pygame.draw.rect(self.screen, scene["ground_top"], (preview.x, preview.bottom - 8, preview.width, 8))
+            label = self.small_font.render(scene["name"], True, (249, 242, 222))
+            self.screen.blit(label, (x + 14, y + 108))
+            status = "SELECIONADO" if selected else ("DESBLOQUEADO" if unlocked else f"{scene['price']} moedas")
+            status_text = self.arcade_small_font.render(status, True, (165, 226, 169) if unlocked else (255, 215, 132))
+            self.screen.blit(status_text, (x + 14, y + 138))
             if selected:
-                pygame.draw.rect(self.screen, (120, 255, 150), rect.inflate(-10, -10), width=3, border_radius=18)
-            button_label = "SELECIONAR" if unlocked else "COMPRAR"
-            btn = Button(x + 18, y + 135, 184, 26, button_label, lambda sid=scene["id"]: self.buy_scene(sid), accent=(125, 175, 255) if unlocked else (255, 214, 90))
-            btn.draw(self.screen, self.small_font)
-            x += 250
-            if x > 1000:
-                x = 120
-                y += 220
+                pygame.draw.rect(self.screen, (160, 231, 167), rect.inflate(-8, -8), width=2, border_radius=10)
 
-        back_button = Button(50, 640, 160, 40, "VOLTAR", self.back_to_menu, accent=(255, 144, 144))
-        back_button.draw(self.screen, self.small_font)
+        self.draw_back_button()
 
     def draw_settings(self):
-        self.draw_background(self.screen, self.current_scene)
-        title = self.big_font.render("CONFIGURAÇÕES", True, (255, 255, 255))
-        self.screen.blit(title, (430, 80))
+        self.draw_page_frame("CONFIGURAÇÕES", "Personalize os controles e a apresentação do jogo.")
+        settings = self.save_data["settings"]
 
-        self.screen.blit(self.small_font.render("Volume Geral", True, (255, 255, 255)), (180, 190))
-        self.screen.blit(self.small_font.render(f"{self.save_data['settings']['master_volume']:.1f}", True, (255, 255, 255)), (980, 190))
-        self.screen.blit(self.small_font.render("Música", True, (255, 255, 255)), (180, 260))
-        self.screen.blit(self.small_font.render(f"{self.save_data['settings']['music_volume']:.1f}", True, (255, 255, 255)), (980, 260))
-        self.screen.blit(self.small_font.render("Efeitos", True, (255, 255, 255)), (180, 330))
-        self.screen.blit(self.small_font.render(f"{self.save_data['settings']['sfx_volume']:.1f}", True, (255, 255, 255)), (980, 330))
-        self.screen.blit(self.small_font.render("FPS", True, (255, 255, 255)), (180, 400))
-        self.screen.blit(self.small_font.render(f"{self.save_data['settings']['fps_limit']}", True, (255, 255, 255)), (980, 400))
-        back_button = Button(50, 640, 160, 40, "VOLTAR", self.back_to_menu, accent=(255, 144, 144))
-        back_button.draw(self.screen, self.small_font)
+        def draw_slider(label, setting, y):
+            pygame.draw.rect(self.screen, (29, 47, 66), (100, y - 16, 1080, 52), border_radius=8)
+            self.screen.blit(self.small_font.render(label, True, (245, 242, 226)), (122, y - 7))
+            track = pygame.Rect(500, y + 6, 460, 8)
+            pygame.draw.rect(self.screen, (13, 23, 39), track, border_radius=4)
+            fill = int(track.width * settings.get(setting, 0.8))
+            pygame.draw.rect(self.screen, (112, 199, 183), (track.x, track.y, fill, track.height), border_radius=4)
+            pygame.draw.circle(self.screen, (255, 218, 136), (track.x + fill, track.centery), 11)
+            value = self.arcade_small_font.render(f"{settings.get(setting, 0.8):.1f}", True, (255, 221, 143))
+            self.screen.blit(value, value.get_rect(midleft=(985, y - 1)))
+
+        draw_slider("VOLUME GERAL", "master_volume", 184)
+        draw_slider("MÚSICA", "music_volume", 254)
+        draw_slider("EFEITOS", "sfx_volume", 324)
+
+        difficulty = DIFFICULTY_PRESETS.get(settings.get("difficulty"), DIFFICULTY_PRESETS["normal"])["label"]
+        rows = (
+            (385, "DIFICULDADE", difficulty, "Altera a velocidade e o espaço entre os obstáculos."),
+            (455, "LIMITE DE FPS", f"{settings.get('fps_limit', 60) or 'SEM LIMITE'}", "Ciclo: 30 → 60 → 120 → sem limite."),
+            (520, "TELA", "INTEIRA" if settings.get("fullscreen", False) else "JANELA", "Clique para alternar o modo de exibição."),
+            (580, "PARTÍCULAS", "ATIVADAS" if settings.get("particles_enabled", True) else "DESATIVADAS", "Desative para reduzir efeitos visuais."),
+        )
+        for y, label, value, description in rows:
+            row_rect = pygame.Rect(100, y, 1080, 44)
+            pygame.draw.rect(self.screen, (29, 47, 66), row_rect, border_radius=8)
+            self.screen.blit(self.small_font.render(label, True, (245, 242, 226)), (122, y + 6))
+            self.screen.blit(self.arcade_small_font.render(description, True, (163, 187, 196)), (430, y + 12))
+            value_surface = self.arcade_small_font.render(value, True, (255, 221, 143))
+            self.screen.blit(value_surface, value_surface.get_rect(midright=(1158, y + 22)))
+
+        self.draw_back_button(self.back_from_settings)
+
+    def draw_pause(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((9, 15, 29, 190))
+        self.screen.blit(overlay, (0, 0))
+        panel = pygame.Rect(390, 125, 500, 485)
+        pygame.draw.rect(self.screen, (12, 21, 38), panel.move(0, 8), border_radius=18)
+        pygame.draw.rect(self.screen, (25, 42, 63), panel, border_radius=18)
+        pygame.draw.rect(self.screen, (255, 207, 117), panel, width=3, border_radius=18)
+        title = self.big_font.render("PAUSADO", True, (255, 226, 164))
+        self.screen.blit(title, title.get_rect(center=(640, 195)))
+        subtitle = self.small_font.render("Seu voo está esperando.", True, (196, 218, 222))
+        self.screen.blit(subtitle, subtitle.get_rect(center=(640, 247)))
+        self.pause_buttons = [
+            Button(490, 292, 300, 54, "CONTINUAR", self.resume_game, accent=(151, 211, 145), text_color=(25, 34, 52)),
+            Button(490, 359, 300, 50, "RECOMEÇAR", self.start_game, accent=(255, 204, 112), text_color=(35, 28, 38)),
+            Button(490, 422, 300, 50, "CONFIGURAÇÕES", self.open_settings, accent=(119, 190, 207), text_color=(25, 34, 52)),
+            Button(490, 485, 300, 50, "MENU PRINCIPAL", self.back_to_menu, accent=(221, 130, 113), text_color=(35, 28, 38)),
+        ]
+        for button in self.pause_buttons:
+            button.draw(self.screen, self.arcade_small_font)
 
     def draw_game(self):
         self.draw_background(self.screen, self.current_scene)
@@ -559,47 +820,75 @@ class FlappyGame:
         for particle in self.particles:
             particle.draw(self.screen)
 
-        score_text = self.big_font.render(str(self.score), True, (255, 255, 255))
-        self.screen.blit(score_text, (SCREEN_WIDTH // 2 - 30, 40))
-        coins_text = self.small_font.render(f"Moedas: {self.round_coins}", True, (255, 220, 110))
-        self.screen.blit(coins_text, (70, 80))
+        hud = pygame.Surface((420, 88), pygame.SRCALPHA)
+        hud.fill((13, 25, 42, 190))
+        self.screen.blit(hud, (430, 20))
+        pygame.draw.rect(self.screen, (255, 207, 117), (430, 20, 420, 88), width=2)
+        score_text = self.big_font.render(str(self.score), True, (255, 245, 220))
+        self.screen.blit(score_text, score_text.get_rect(center=(640, 48)))
+        coins_text = self.arcade_small_font.render(f"MOEDAS  {self.round_coins}", True, (255, 220, 130))
+        self.screen.blit(coins_text, (447, 78))
+        combo_text = self.arcade_small_font.render(f"SEQUÊNCIA  {self.streak}", True, (170, 231, 183))
+        self.screen.blit(combo_text, (678, 78))
+        pause_button = Button(1156, 18, 88, 42, "II", None, accent=(255, 204, 112), text_color=(35, 28, 38))
+        pause_button.draw(self.screen, self.arcade_small_font)
 
         if self.state == "game_over":
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            pygame.draw.rect(overlay, (0, 0, 0, 150), (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
+            pygame.draw.rect(overlay, (5, 12, 24, 205), (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
             self.screen.blit(overlay, (0, 0))
-            game_over = self.big_font.render("GAME OVER", True, (255, 255, 255))
-            self.screen.blit(game_over, (470, 180))
-            points = self.font.render(f"Pontuação: {self.score}", True, (255, 255, 255))
-            self.screen.blit(points, (520, 260))
-            record = self.font.render(f"Recorde: {self.save_data['high_score']}", True, (255, 255, 255))
-            self.screen.blit(record, (510, 310))
-            coins = self.font.render(f"Moedas desta partida: {self.round_coins}", True, (255, 220, 110))
-            self.screen.blit(coins, (430, 360))
-            btn_restart = Button(460, 430, 190, 52, "JOGAR NOVAMENTE", self.start_game, accent=(120, 220, 135))
-            btn_restart.draw(self.screen, self.small_font)
-            btn_menu = Button(680, 430, 170, 52, "MENU", self.back_to_menu, accent=(255, 150, 150))
-            btn_menu.draw(self.screen, self.small_font)
+            panel = pygame.Rect(390, 125, 500, 485)
+            pygame.draw.rect(self.screen, (13, 24, 42), panel.move(0, 8), border_radius=18)
+            pygame.draw.rect(self.screen, (25, 42, 63), panel, border_radius=18)
+            pygame.draw.rect(self.screen, (255, 207, 117), panel, width=3, border_radius=18)
+            title = self.big_font.render("FIM DE JOGO", True, (255, 226, 164))
+            self.screen.blit(title, title.get_rect(center=(640, 192)))
+            if self.warning_message:
+                status = self.arcade_small_font.render(self.warning_message, True, (160, 232, 165))
+                self.screen.blit(status, status.get_rect(center=(640, 240)))
+
+            score_label = self.small_font.render(f"PONTUAÇÃO   {self.score}", True, (245, 242, 226))
+            record_label = self.small_font.render(f"RECORDE      {self.save_data['high_score']}", True, (245, 242, 226))
+            reward_label = self.small_font.render(f"MOEDAS GANHAS   +{self.round_coins}", True, (255, 220, 130))
+            streak_label = self.arcade_small_font.render(f"MELHOR SEQUÊNCIA   {self.best_streak}", True, (170, 231, 183))
+            for label, y in ((score_label, 292), (record_label, 332), (reward_label, 372), (streak_label, 412)):
+                self.screen.blit(label, label.get_rect(center=(640, y)))
+
+            self.game_over_buttons = [
+                Button(475, 465, 330, 52, "TENTAR DE NOVO", self.start_game, accent=(151, 211, 145), text_color=(25, 34, 52)),
+                Button(475, 530, 330, 48, "MENU PRINCIPAL", self.back_to_menu, accent=(119, 190, 207), text_color=(25, 34, 52)),
+            ]
+            for button in self.game_over_buttons:
+                button.draw(self.screen, self.arcade_small_font)
 
     def render_loading(self):
         self.draw_background(self.screen, self.current_scene)
-        title = self.big_font.render("FLAPPY BIRD DELUXE", True, (255, 255, 255))
-        self.screen.blit(title, (310, 120))
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((12, 24, 42, 140))
+        self.screen.blit(overlay, (0, 0))
+        title = self.arcade_font.render("FLAPPY BIRD", True, (255, 219, 141))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 220)))
+        subtitle = self.small_font.render("Preparando sua próxima aventura", True, (237, 241, 225))
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 285)))
 
-        msg = self.small_font.render(self.loading_steps[min(self.loading_index, len(self.loading_steps) - 1)], True, (255, 255, 255))
-        self.screen.blit(msg, (500, 220))
+        progress_rect = pygame.Rect(340, 360, 600, 22)
+        progress = clamp((self.loading_index + self.loading_progress) / len(self.loading_steps), 0, 1)
+        pygame.draw.rect(self.screen, (14, 25, 42), progress_rect)
+        pygame.draw.rect(self.screen, (255, 207, 117), progress_rect, width=2)
+        fill_width = max(0, min(progress_rect.width - 4, int(progress * (progress_rect.width - 4))))
+        if fill_width:
+            pygame.draw.rect(self.screen, (122, 209, 163), (progress_rect.x + 2, progress_rect.y + 2, fill_width, progress_rect.height - 4))
 
-        progress_rect = pygame.Rect(340, 300, 600, 28)
-        fill_width = int((self.loading_progress) * 600)
-        pygame.draw.rect(self.screen, (255, 255, 255), progress_rect, 3, border_radius=10)
-        pygame.draw.rect(self.screen, (120, 220, 130), (progress_rect.x + 4, progress_rect.y + 4, fill_width - 8, 20), border_radius=10)
-
-        percentage = self.font.render(f"{int((self.loading_index + self.loading_progress) / len(self.loading_steps) * 100)}%", True, (255, 255, 255))
-        self.screen.blit(percentage, (590, 350))
+        message = self.loading_steps[min(self.loading_index, len(self.loading_steps) - 1)]
+        msg = self.arcade_small_font.render(message.upper(), True, (209, 224, 220))
+        self.screen.blit(msg, msg.get_rect(center=(SCREEN_WIDTH // 2, 410)))
+        percentage = self.arcade_small_font.render(f"{int(progress * 100)}%", True, (255, 224, 146))
+        self.screen.blit(percentage, percentage.get_rect(center=(SCREEN_WIDTH // 2, 452)))
 
     def run(self):
         while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
+            fps_limit = self.save_data["settings"].get("fps_limit", FPS)
+            dt = min(self.clock.tick(fps_limit) / 1000.0, 0.05)
             for event in pygame.event.get():
                 self.handle_event(event)
             self.update(dt)
@@ -617,9 +906,12 @@ class FlappyGame:
                 self.draw_scenarios()
             elif self.state == "settings":
                 self.draw_settings()
-            elif self.state in {"playing", "game_over"}:
+            elif self.state in {"playing", "paused", "game_over"}:
                 self.draw_game()
+                if self.state == "paused":
+                    self.draw_pause()
 
+            self.draw_notice()
             pygame.display.flip()
 
         pygame.quit()

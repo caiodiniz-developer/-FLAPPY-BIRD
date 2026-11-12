@@ -22,6 +22,7 @@ def default_state():
             "window_height": 720,
             "fps_limit": 60,
             "particles_enabled": True,
+            "difficulty": "normal",
         },
         "stats": {
             "games_played": 0,

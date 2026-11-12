@@ -108,16 +108,17 @@ class Bird:
 
 
 class PipePair:
-    def __init__(self, x, gap_y, gap_height, width=90):
+    def __init__(self, x, gap_y, gap_height, width=90, speed=PIPE_SPEED):
         self.x = x
         self.gap_y = gap_y
         self.gap_height = gap_height
         self.width = width
+        self.speed = speed
         self.passed = False
         self.scored = False
 
     def update(self, dt):
-        self.x -= PIPE_SPEED * dt
+        self.x -= self.speed * dt
 
     def draw(self, surface, scene):
         top_color = scene["mountain_a"]
