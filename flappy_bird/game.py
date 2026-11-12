@@ -46,8 +46,8 @@ class FlappyGame:
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 52, bold=True)
         self.small_font = pygame.font.SysFont("Arial", 22)
-        self.arcade_font = pygame.font.SysFont("Courier New", 60, bold=True)
-        self.arcade_small_font = pygame.font.SysFont("Courier New", 19, bold=True)
+        self.arcade_font = pygame.font.SysFont("Arial", 58, bold=True)
+        self.arcade_small_font = pygame.font.SysFont("Arial", 19, bold=True)
         self.loading_steps = [
             "Inicializando Pygame",
             "Carregando cenários",
@@ -79,7 +79,9 @@ class FlappyGame:
 
         self.reset_run()
         self.menu_bird = Bird(900, 375, self.bird_by_id(self.current_bird_id))
+        self.loading_bird = Bird(300, 455, self.bird_by_id(self.current_bird_id))
         self.menu_elapsed = 0.0
+        self.loading_elapsed = 0.0
         self.populate_menu_buttons()
 
     def bird_by_id(self, bird_id):
@@ -449,10 +451,15 @@ class FlappyGame:
     def update(self, dt):
         self.notice_timer = max(0.0, self.notice_timer - dt)
         if self.state == "loading":
+            self.loading_elapsed += dt
             self.loading_progress += dt * 0.45
             if self.loading_progress >= 1.0 and self.loading_index < len(self.loading_steps):
                 self.loading_index += 1
                 self.loading_progress = 0.0
+            progress = clamp((self.loading_index + self.loading_progress) / len(self.loading_steps), 0, 1)
+            self.loading_bird.x = 280 + progress * 700
+            self.loading_bird.y = 455 + math.sin(self.loading_elapsed * 4) * 12
+            self.loading_bird.frame += dt * 14
             if self.loading_index >= len(self.loading_steps):
                 self.state = "menu"
                 return
@@ -496,44 +503,70 @@ class FlappyGame:
             pygame.draw.circle(surface, (240, 200, 130), (1030, 120), 35)
             pygame.draw.circle(surface, (160, 140, 255), (900, 170), 18)
 
-        for i in range(7):
-            cloud_x = (i * 220 + pygame.time.get_ticks() * 0.03) % (SCREEN_WIDTH + 220) - 110
-            cloud_y = 90 + (i % 3) * 55
-            pygame.draw.ellipse(surface, scene["cloud"], (cloud_x, cloud_y, 100, 40))
-            pygame.draw.ellipse(surface, scene["cloud"], (cloud_x + 28, cloud_y - 15, 90, 40))
+        # A low band of block-shaped clouds and a quiet skyline mirrors the
+        # hand-drawn pixel scenery in the reference image.
+        cloud_fill = (242, 255, 216) if scene["theme"] in ("day", "city") else scene["cloud"]
+        cloud_shadow = tuple(max(0, channel - 32) for channel in cloud_fill)
+        cloud_y = 445
+        for i, cloud_x in enumerate(range(-48, SCREEN_WIDTH + 180, 206)):
+            drift = int(pygame.time.get_ticks() * 0.009) % 206
+            x = cloud_x - drift
+            crown_y = cloud_y + (i % 3) * 18
+            pygame.draw.rect(surface, cloud_shadow, (x, crown_y + 28, 180, 52))
+            pygame.draw.rect(surface, cloud_fill, (x + 18, crown_y + 14, 145, 54))
+            pygame.draw.rect(surface, cloud_fill, (x + 43, crown_y, 84, 34))
+            pygame.draw.rect(surface, cloud_fill, (x + 124, crown_y + 8, 48, 34))
+            pygame.draw.rect(surface, (255, 255, 240), (x + 34, crown_y + 18, 106, 10))
 
-        mountain_a = scene["mountain_a"]
-        mountain_b = scene["mountain_b"]
-        pygame.draw.polygon(surface, mountain_a, [(0, SCREEN_HEIGHT - 90), (180, 400), (350, SCREEN_HEIGHT - 120), (560, 330), (790, SCREEN_HEIGHT - 100), (950, 440), (SCREEN_WIDTH, SCREEN_HEIGHT - 90)])
-        pygame.draw.polygon(surface, mountain_b, [(0, SCREEN_HEIGHT), (220, 430), (430, SCREEN_HEIGHT - 60), (690, 390), (980, SCREEN_HEIGHT - 80), (SCREEN_WIDTH, SCREEN_HEIGHT)])
+        horizon = 625
+        building_outline = (67, 187, 200)
+        building_fill = (157, 221, 193) if scene["theme"] != "night" else (57, 91, 126)
+        building_specs = (
+            (34, 86, 145), (117, 54, 206), (205, 120, 115), (345, 76, 158),
+            (485, 115, 214), (660, 66, 132), (779, 108, 183), (945, 76, 162),
+            (1098, 120, 220), (1222, 72, 156),
+        )
+        for index, (x, width, height) in enumerate(building_specs):
+            top = horizon - height
+            rect = pygame.Rect(x, top, width, height)
+            pygame.draw.rect(surface, building_outline, rect.inflate(8, 8), 5)
+            pygame.draw.rect(surface, building_fill, rect)
+            pygame.draw.rect(surface, (209, 250, 224), (x + 8, top + 8, 7, height - 16))
+            for window_y in range(top + 16, horizon - 14, 24):
+                for window_x in range(x + 20, x + width - 8, 22):
+                    pygame.draw.rect(surface, (116, 200, 185), (window_x, window_y, 8, 12))
+            if index % 3 == 1:
+                pygame.draw.rect(surface, building_outline, (x + width // 2 - 12, top - 28, 24, 28), 4)
 
         if scene["theme"] == "forest":
-            for x in range(0, SCREEN_WIDTH + 80, 90):
-                pygame.draw.rect(surface, (65, 42, 28), (x, SCREEN_HEIGHT - 110, 16, 80))
-                pygame.draw.polygon(surface, (20, 110, 40), [(x - 25, SCREEN_HEIGHT - 110), (x + 20, SCREEN_HEIGHT - 180), (x + 65, SCREEN_HEIGHT - 110)])
-        if scene["theme"] == "city":
-            for x in range(0, SCREEN_WIDTH + 40, 110):
-                building_h = 120 + (x % 180)
-                pygame.draw.rect(surface, (60, 72, 90), (x, SCREEN_HEIGHT - 90 - building_h, 70, building_h))
-                for wx in range(x + 10, x + 60, 16):
-                    for wy in range(SCREEN_HEIGHT - 90 - building_h + 15, SCREEN_HEIGHT - 100, 26):
-                        pygame.draw.rect(surface, (255, 220, 110), (wx, wy, 8, 12))
-        if scene["theme"] == "desert":
-            for x in range(0, SCREEN_WIDTH + 50, 150):
-                pygame.draw.polygon(surface, (212, 172, 85), [(x, SCREEN_HEIGHT - 90), (x + 40, SCREEN_HEIGHT - 140), (x + 90, SCREEN_HEIGHT - 90)])
-        if scene["theme"] == "snow":
-            for x in range(0, SCREEN_WIDTH + 50, 100):
-                pygame.draw.circle(surface, (255, 255, 255), (x, SCREEN_HEIGHT - 92), 15)
-        if scene["theme"] == "volcano":
+            for x in range(0, SCREEN_WIDTH + 80, 105):
+                pygame.draw.rect(surface, (75, 58, 50), (x + 34, horizon - 98, 18, 100))
+                for tier in range(4):
+                    tier_y = horizon - 58 - tier * 28
+                    tier_w = 82 - tier * 15
+                    pygame.draw.rect(surface, (36, 119 - tier * 7, 76 - tier * 5), (x + 43 - tier_w // 2, tier_y - 20, tier_w, 28))
+        elif scene["theme"] == "desert":
+            for x in range(-20, SCREEN_WIDTH + 100, 190):
+                pygame.draw.rect(surface, (215, 164, 91), (x, horizon - 55, 96, 55))
+                pygame.draw.rect(surface, (232, 191, 113), (x + 16, horizon - 76, 64, 24))
+        elif scene["theme"] == "snow":
             for x in range(0, SCREEN_WIDTH + 60, 110):
-                pygame.draw.polygon(surface, (140, 24, 16), [(x, SCREEN_HEIGHT - 90), (x + 50, SCREEN_HEIGHT - 220), (x + 100, SCREEN_HEIGHT - 90)])
-                pygame.draw.circle(surface, (255, 110, 30), (x + 60, SCREEN_HEIGHT - 175), 8)
+                pygame.draw.rect(surface, (240, 250, 255), (x, horizon - 20, 42, 12))
+                pygame.draw.rect(surface, (240, 250, 255), (x + 12, horizon - 32, 24, 12))
+        elif scene["theme"] == "volcano":
+            for x in range(-30, SCREEN_WIDTH + 80, 140):
+                pygame.draw.polygon(surface, (92, 40, 37), [(x, horizon), (x + 48, horizon - 124), (x + 112, horizon)])
+                pygame.draw.rect(surface, (255, 124, 48), (x + 45, horizon - 72, 12, 42))
 
         ground_y = SCREEN_HEIGHT - 90
-        pygame.draw.rect(surface, scene["ground_top"], (0, ground_y, SCREEN_WIDTH, 90))
-        pygame.draw.rect(surface, scene["ground_bottom"], (0, ground_y + 40, SCREEN_WIDTH, 90))
-        for x in range(0, SCREEN_WIDTH + 30, 20):
-            pygame.draw.rect(surface, (255, 255, 255, 80), (x, ground_y + 40 + (x % 40), 10, 10), border_radius=4)
+        pygame.draw.rect(surface, (52, 126, 78), (0, ground_y, SCREEN_WIDTH, SCREEN_HEIGHT - ground_y))
+        pygame.draw.rect(surface, (157, 219, 97), (0, ground_y, SCREEN_WIDTH, 11))
+        pygame.draw.rect(surface, (227, 204, 139), (0, ground_y + 18, SCREEN_WIDTH, 26))
+        pygame.draw.rect(surface, (155, 112, 95), (0, ground_y + 44, SCREEN_WIDTH, SCREEN_HEIGHT - ground_y - 44))
+        for x in range(0, SCREEN_WIDTH, 32):
+            pygame.draw.rect(surface, (73, 164, 87), (x, ground_y, 17, 5))
+            pygame.draw.rect(surface, (127, 91, 87), (x + (16 if x % 64 else 0), ground_y + 49, 16, 9))
+            pygame.draw.rect(surface, (190, 144, 115), (x, ground_y + 67, 16, 8))
 
     def draw_menu(self):
         for y in range(0, SCREEN_HEIGHT, 8):
@@ -600,7 +633,7 @@ class FlappyGame:
         arcade_text("FLAPPY", (100, 84), (255, 205, 96), self.arcade_font)
         arcade_text("BIRD", (102, 143), (123, 214, 218), self.arcade_font)
         pygame.draw.rect(self.screen, (246, 190, 91), (100, 222, 348, 3))
-        arcade_text("PIXEL ARCADE EDITION", (104, 235), (208, 226, 218), self.arcade_small_font)
+        arcade_text("EDIÇÃO ARCADE PIXEL", (104, 235), (208, 226, 218), self.arcade_small_font)
 
         for button in self.menu_buttons:
             button.draw(self.screen, self.arcade_small_font)
@@ -617,13 +650,13 @@ class FlappyGame:
         pygame.draw.rect(self.screen, (18, 30, 52), (690, 265, 440, 250), 5)
         pygame.draw.rect(self.screen, (32, 75, 86), (704, 279, 412, 222))
         pygame.draw.rect(self.screen, (246, 190, 91), (700, 275, 420, 230), 2)
-        self.screen.blit(self.arcade_small_font.render("PLAYER 01", True, (255, 224, 143)), (824, 284))
+        self.screen.blit(self.arcade_small_font.render("JOGADOR 01", True, (255, 224, 143)), (824, 284))
         pygame.draw.rect(self.screen, (255, 232, 153), (808, 447, 184, 8))
         pygame.draw.rect(self.screen, (255, 232, 153), (832, 455, 136, 5))
         self.menu_bird.draw(self.screen, self.current_scene, scale=2.15)
-        hint = self.arcade_small_font.render("SPACE / CLICK TO FLAP", True, (244, 249, 229))
+        hint = self.arcade_small_font.render("ESPAÇO / CLIQUE PARA VOAR", True, (244, 249, 229))
         self.screen.blit(hint, hint.get_rect(center=(910, 550)))
-        footer = self.arcade_small_font.render("PRESS START  •  FLY YOUR WAY", True, (48, 95, 72))
+        footer = self.arcade_small_font.render("APERTE ESPAÇO  •  VAMOS VOAR", True, (48, 95, 72))
         self.screen.blit(footer, footer.get_rect(center=(910, 635)))
 
     def draw_page_frame(self, title, subtitle):
@@ -820,16 +853,18 @@ class FlappyGame:
         for particle in self.particles:
             particle.draw(self.screen)
 
-        hud = pygame.Surface((420, 88), pygame.SRCALPHA)
-        hud.fill((13, 25, 42, 190))
-        self.screen.blit(hud, (430, 20))
-        pygame.draw.rect(self.screen, (255, 207, 117), (430, 20, 420, 88), width=2)
-        score_text = self.big_font.render(str(self.score), True, (255, 245, 220))
-        self.screen.blit(score_text, score_text.get_rect(center=(640, 48)))
+        hud = pygame.Surface((200, 66), pygame.SRCALPHA)
+        hud.fill((13, 25, 42, 175))
+        self.screen.blit(hud, (24, 20))
+        pygame.draw.rect(self.screen, (255, 207, 117), (24, 20, 200, 66), width=2)
         coins_text = self.arcade_small_font.render(f"MOEDAS  {self.round_coins}", True, (255, 220, 130))
-        self.screen.blit(coins_text, (447, 78))
         combo_text = self.arcade_small_font.render(f"SEQUÊNCIA  {self.streak}", True, (170, 231, 183))
-        self.screen.blit(combo_text, (678, 78))
+        self.screen.blit(coins_text, (38, 29))
+        self.screen.blit(combo_text, (38, 57))
+        score_text = self.arcade_font.render(str(self.score), True, (255, 245, 220))
+        score_shadow = self.arcade_font.render(str(self.score), True, (48, 39, 55))
+        self.screen.blit(score_shadow, score_shadow.get_rect(center=(SCREEN_WIDTH // 2 + 3, 54)))
+        self.screen.blit(score_text, score_text.get_rect(center=(SCREEN_WIDTH // 2, 50)))
         pause_button = Button(1156, 18, 88, 42, "II", None, accent=(255, 204, 112), text_color=(35, 28, 38))
         pause_button.draw(self.screen, self.arcade_small_font)
 
@@ -863,27 +898,41 @@ class FlappyGame:
 
     def render_loading(self):
         self.draw_background(self.screen, self.current_scene)
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((12, 24, 42, 140))
-        self.screen.blit(overlay, (0, 0))
-        title = self.arcade_font.render("FLAPPY BIRD", True, (255, 219, 141))
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 220)))
-        subtitle = self.small_font.render("Preparando sua próxima aventura", True, (237, 241, 225))
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 285)))
+        veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        veil.fill((22, 111, 130, 42))
+        self.screen.blit(veil, (0, 0))
 
-        progress_rect = pygame.Rect(340, 360, 600, 22)
+        title_shadow = self.arcade_font.render("FLAPPY BIRD", True, (37, 63, 76))
+        title = self.arcade_font.render("FLAPPY BIRD", True, (255, 247, 215))
+        self.screen.blit(title_shadow, title_shadow.get_rect(center=(SCREEN_WIDTH // 2 + 4, 125)))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 120)))
+        subtitle = self.small_font.render("UMA AVENTURA PIXEL A PIXEL", True, (255, 255, 238))
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 170)))
+
+        pipe = PipePair(930, 285, 190, width=82, speed=0)
+        pipe.draw(self.screen, self.current_scene)
+        self.loading_bird.draw(self.screen, self.current_scene, scale=1.2)
+
+        card = pygame.Surface((760, 112), pygame.SRCALPHA)
+        card.fill((15, 42, 62, 224))
+        self.screen.blit(card, (260, 530))
+        pygame.draw.rect(self.screen, (47, 64, 75), (260, 530, 760, 112), width=4)
+        pygame.draw.rect(self.screen, (255, 235, 169), (268, 538, 744, 4))
+
+        progress_rect = pygame.Rect(310, 566, 640, 18)
         progress = clamp((self.loading_index + self.loading_progress) / len(self.loading_steps), 0, 1)
         pygame.draw.rect(self.screen, (14, 25, 42), progress_rect)
-        pygame.draw.rect(self.screen, (255, 207, 117), progress_rect, width=2)
+        pygame.draw.rect(self.screen, (244, 249, 218), progress_rect, width=2)
         fill_width = max(0, min(progress_rect.width - 4, int(progress * (progress_rect.width - 4))))
         if fill_width:
-            pygame.draw.rect(self.screen, (122, 209, 163), (progress_rect.x + 2, progress_rect.y + 2, fill_width, progress_rect.height - 4))
+            pygame.draw.rect(self.screen, (88, 232, 103), (progress_rect.x + 2, progress_rect.y + 2, fill_width, progress_rect.height - 4))
+            pygame.draw.rect(self.screen, (201, 255, 172), (progress_rect.x + 2, progress_rect.y + 2, fill_width, 4))
 
         message = self.loading_steps[min(self.loading_index, len(self.loading_steps) - 1)]
-        msg = self.arcade_small_font.render(message.upper(), True, (209, 224, 220))
-        self.screen.blit(msg, msg.get_rect(center=(SCREEN_WIDTH // 2, 410)))
-        percentage = self.arcade_small_font.render(f"{int(progress * 100)}%", True, (255, 224, 146))
-        self.screen.blit(percentage, percentage.get_rect(center=(SCREEN_WIDTH // 2, 452)))
+        msg = self.small_font.render(message, True, (239, 248, 229))
+        self.screen.blit(msg, msg.get_rect(midleft=(310, 610)))
+        percentage = self.arcade_small_font.render(f"{int(progress * 100)}%", True, (255, 230, 151))
+        self.screen.blit(percentage, percentage.get_rect(midright=(950, 610)))
 
     def run(self):
         while self.running:

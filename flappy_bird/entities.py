@@ -27,24 +27,24 @@ class Bird:
     def draw(self, surface, scene, scale=1.0):
         cell = 3
         mask = (
-            ".......######........",
-            ".....##########......",
-            "...##############....",
-            "..################..",
-            ".##################.",
-            "####################",
-            "####################",
-            ".##################.",
-            "..################..",
-            "...##############...",
-            ".....##########......",
-            "......########........",
+            "........#####.........",
+            "......#########.......",
+            "....#############.....",
+            "...###############....",
+            "..##################..",
+            ".####################.",
+            "######################",
+            "#####################.",
+            ".###################..",
+            "..################....",
+            "...############.......",
+            ".....########.........",
         )
         base = self.bird_type.get("colors", (255, 214, 10))
         accent = self.bird_type.get("accent", (255, 146, 43))
         shadow = tuple(max(12, channel // 3) for channel in base)
         highlight = tuple(min(255, int(channel * 0.68 + 88)) for channel in base)
-        sprite = pygame.Surface((26 * cell, 20 * cell), pygame.SRCALPHA)
+        sprite = pygame.Surface((28 * cell, 20 * cell), pygame.SRCALPHA)
         start_x, start_y = 2, 3
 
         # Expand the silhouette by one pixel to create a crisp arcade outline.
@@ -68,34 +68,41 @@ class Bird:
                 x = start_x + column
                 y = start_y + row
                 color = base
-                if row < 3 and column > 11:
+                if row < 4 and column > 9:
                     color = highlight
-                elif row > 7 and column < 10:
-                    color = accent
+                elif row > 8 and column < 12:
+                    color = shadow
                 pygame.draw.rect(sprite, color, (x * cell, y * cell, cell, cell))
+
+        crest = (255, 247, 224)
+        pygame.draw.rect(sprite, crest, ((start_x + 10) * cell, (start_y + 1) * cell, 5 * cell, 2 * cell))
+        pygame.draw.rect(sprite, crest, ((start_x + 8) * cell, (start_y + 2) * cell, 9 * cell, 2 * cell))
+        pygame.draw.rect(sprite, (216, 229, 218), ((start_x + 8) * cell, (start_y + 4) * cell, 4 * cell, cell))
 
         # A layered wing, cream belly, bright beak and chunky pixel eye give
         # each unlockable bird a readable silhouette at gameplay scale.
-        wing_x = (start_x + 5) * cell
+        wing_x = (start_x + 4) * cell
         wing_y = (start_y + 6) * cell + wing_lift
-        pygame.draw.rect(sprite, shadow, (wing_x, wing_y + cell, 8 * cell, 4 * cell))
-        pygame.draw.rect(sprite, highlight, (wing_x + cell, wing_y, 6 * cell, 4 * cell))
-        pygame.draw.rect(sprite, base, (wing_x + 2 * cell, wing_y + cell, 5 * cell, cell))
-        pygame.draw.rect(sprite, (255, 238, 199), ((start_x + 9) * cell, (start_y + 8) * cell, 6 * cell, 2 * cell))
+        pygame.draw.rect(sprite, (17, 21, 39), (wing_x - cell, wing_y, 10 * cell, 5 * cell))
+        pygame.draw.rect(sprite, shadow, (wing_x, wing_y + cell, 8 * cell, 3 * cell))
+        pygame.draw.rect(sprite, highlight, (wing_x + cell, wing_y, 7 * cell, 3 * cell))
+        pygame.draw.rect(sprite, base, (wing_x + 2 * cell, wing_y + cell, 6 * cell, cell))
+        pygame.draw.rect(sprite, (255, 244, 216), ((start_x + 9) * cell, (start_y + 8) * cell, 7 * cell, 2 * cell))
 
-        eye_x, eye_y = (start_x + 15) * cell, (start_y + 3) * cell
-        pygame.draw.rect(sprite, (17, 21, 39), (eye_x - cell, eye_y - cell, 4 * cell, 5 * cell))
-        pygame.draw.rect(sprite, (255, 250, 230), (eye_x, eye_y, 2 * cell, 3 * cell))
-        pygame.draw.rect(sprite, (24, 31, 56), (eye_x + cell, eye_y + cell, cell, 2 * cell))
-        beak_x, beak_y = (start_x + 20) * cell, (start_y + 6) * cell
-        pygame.draw.rect(sprite, (123, 54, 41), (beak_x, beak_y + cell, 4 * cell, 2 * cell))
-        pygame.draw.rect(sprite, accent, (beak_x, beak_y, 4 * cell, cell))
-        pygame.draw.rect(sprite, (255, 236, 155), (beak_x + cell, beak_y, 2 * cell, cell))
+        eye_x, eye_y = (start_x + 15) * cell, (start_y + 2) * cell
+        pygame.draw.rect(sprite, (17, 21, 39), (eye_x - cell, eye_y - cell, 5 * cell, 6 * cell))
+        pygame.draw.rect(sprite, (255, 250, 230), (eye_x, eye_y, 3 * cell, 4 * cell))
+        pygame.draw.rect(sprite, (24, 31, 56), (eye_x + 2 * cell, eye_y + 2 * cell, cell, 2 * cell))
+        beak_x, beak_y = (start_x + 21) * cell, (start_y + 6) * cell
+        pygame.draw.rect(sprite, (49, 37, 45), (beak_x, beak_y, 5 * cell, 4 * cell))
+        pygame.draw.rect(sprite, (242, 91, 40), (beak_x, beak_y + cell, 4 * cell, 2 * cell))
+        pygame.draw.rect(sprite, (255, 189, 62), (beak_x, beak_y, 4 * cell, cell))
+        pygame.draw.rect(sprite, (255, 223, 112), (beak_x + cell, beak_y, 2 * cell, cell))
 
         feet_y = (start_y + 12) * cell
         for foot_x in ((start_x + 7) * cell, (start_x + 13) * cell):
-            pygame.draw.rect(sprite, (82, 48, 42), (foot_x, feet_y, cell, 2 * cell))
-            pygame.draw.rect(sprite, accent, (foot_x - cell, feet_y + cell, 3 * cell, cell))
+            pygame.draw.rect(sprite, (49, 37, 45), (foot_x, feet_y, cell, 2 * cell))
+            pygame.draw.rect(sprite, (242, 130, 48), (foot_x - cell, feet_y + cell, 3 * cell, cell))
 
         pitch = max(-2, min(2, int(self.velocity / 240)))
         sprite = pygame.transform.rotate(sprite, -pitch * 7)
@@ -121,19 +128,41 @@ class PipePair:
         self.x -= self.speed * dt
 
     def draw(self, surface, scene):
-        top_color = scene["mountain_a"]
-        bottom_color = scene["mountain_b"]
-        pipe_cap_color = scene["accent"]
+        outline = (48, 39, 55)
+        green = (45, 230, 64)
+        light = (141, 255, 111)
+        dark = (20, 156, 63)
 
-        top_rect = pygame.Rect(self.x, 0, self.width, self.gap_y)
-        bottom_rect = pygame.Rect(self.x, self.gap_y + self.gap_height, self.width, SCREEN_HEIGHT - (self.gap_y + self.gap_height))
-        cap_top = pygame.Rect(self.x - 8, self.gap_y - 18, self.width + 16, 18)
-        cap_bottom = pygame.Rect(self.x - 8, self.gap_y + self.gap_height, self.width + 16, 18)
+        def draw_pipe_body(rect, cap_at_bottom):
+            if rect.height <= 0:
+                return
+            pygame.draw.rect(surface, outline, rect.inflate(8, 0))
+            pygame.draw.rect(surface, green, rect)
+            pygame.draw.rect(surface, dark, (rect.right - 17, rect.y, 17, rect.height))
+            pygame.draw.rect(surface, light, (rect.x + 8, rect.y, 12, rect.height))
+            pygame.draw.rect(surface, (237, 255, 223), (rect.x + 26, rect.y, 8, rect.height))
+            pygame.draw.rect(surface, (95, 250, 81), (rect.x + 38, rect.y, 5, rect.height))
+            for segment_y in range(rect.y + 38, rect.bottom, 78):
+                pygame.draw.rect(surface, (35, 185, 60), (rect.x + 43, segment_y, rect.width - 60, 3))
 
-        pygame.draw.rect(surface, top_color, top_rect)
-        pygame.draw.rect(surface, bottom_color, bottom_rect)
-        pygame.draw.rect(surface, pipe_cap_color, cap_top)
-        pygame.draw.rect(surface, pipe_cap_color, cap_bottom)
+            cap_y = rect.bottom - 24 if cap_at_bottom else rect.y
+            cap = pygame.Rect(rect.x - 12, cap_y, rect.width + 24, 24)
+            pygame.draw.rect(surface, outline, cap.inflate(8, 6))
+            pygame.draw.rect(surface, green, cap)
+            pygame.draw.rect(surface, light, (cap.x + 7, cap.y + 4, 17, cap.height - 8))
+            pygame.draw.rect(surface, (237, 255, 223), (cap.x + 27, cap.y + 4, 8, cap.height - 8))
+            pygame.draw.rect(surface, dark, (cap.right - 18, cap.y + 3, 10, cap.height - 6))
+            pygame.draw.line(surface, (180, 255, 164), (cap.x + 4, cap.y + 3), (cap.right - 4, cap.y + 3), 2)
+
+        top_rect = pygame.Rect(round(self.x), 0, self.width, max(0, self.gap_y))
+        bottom_rect = pygame.Rect(
+            round(self.x),
+            self.gap_y + self.gap_height,
+            self.width,
+            max(0, SCREEN_HEIGHT - (self.gap_y + self.gap_height)),
+        )
+        draw_pipe_body(top_rect, True)
+        draw_pipe_body(bottom_rect, False)
 
     def collides_with(self, bird):
         if bird.x + bird.radius > self.x and bird.x - bird.radius < self.x + self.width:
