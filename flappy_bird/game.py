@@ -503,8 +503,46 @@ class FlappyGame:
             pygame.draw.circle(surface, (240, 200, 130), (1030, 120), 35)
             pygame.draw.circle(surface, (160, 140, 255), (900, 170), 18)
 
-        # A low band of block-shaped clouds and a quiet skyline mirrors the
-        # hand-drawn pixel scenery in the reference image.
+        if scene["theme"] in ("day", "desert", "snow"):
+            sun_x, sun_y = 1014, 116
+            sun_rows = (24, 48, 64, 80, 80, 64, 48, 24)
+            for row, width in enumerate(sun_rows):
+                row_x = sun_x + (88 - width) // 2
+                pygame.draw.rect(surface, (255, 203, 102), (row_x, sun_y + row * 8, width, 8))
+            for row in range(1, 7):
+                width = sun_rows[row] - 16
+                pygame.draw.rect(surface, (255, 231, 153), (sun_x + (88 - width) // 2, sun_y + row * 8, width, 8))
+            pygame.draw.rect(surface, (255, 247, 190), (sun_x + 28, sun_y + 28, 32, 32))
+            for ray_x in (1002, 1106):
+                pygame.draw.rect(surface, (255, 219, 132), (ray_x, 148, 8, 24))
+            for ray_y in (100, 204):
+                pygame.draw.rect(surface, (255, 219, 132), (1042, ray_y, 24, 8))
+        elif scene["theme"] == "night":
+            pygame.draw.rect(surface, (245, 239, 193), (1030, 122, 64, 64))
+            pygame.draw.rect(surface, scene["sky_top"], (1052, 108, 48, 48))
+
+        # Layered stepped ridges add depth behind the cloud band and foreground.
+        ridge_a = scene.get("mountain_a", (90, 146, 104))
+        ridge_b = scene.get("mountain_b", (63, 108, 82))
+        pygame.draw.polygon(surface, ridge_a, [
+            (0, 574), (0, 526), (80, 526), (80, 494), (150, 494),
+            (150, 462), (228, 462), (228, 494), (310, 494), (310, 526),
+            (420, 526), (420, 478), (520, 478), (520, 510), (610, 510),
+            (610, 542), (760, 542), (760, 494), (840, 494), (840, 462),
+            (930, 462), (930, 494), (1030, 494), (1030, 526),
+            (1140, 526), (1140, 494), (1220, 494), (1220, 526),
+            (SCREEN_WIDTH, 526), (SCREEN_WIDTH, 574),
+        ])
+        pygame.draw.polygon(surface, ridge_b, [
+            (0, 608), (0, 568), (112, 568), (112, 536), (208, 536),
+            (208, 568), (318, 568), (318, 536), (410, 536),
+            (410, 568), (550, 568), (550, 584), (690, 584),
+            (690, 552), (786, 552), (786, 568), (924, 568),
+            (924, 536), (1020, 536), (1020, 568), (1136, 568),
+            (1136, 536), (SCREEN_WIDTH, 536), (SCREEN_WIDTH, 608),
+        ])
+
+        # A low band of block-shaped clouds mirrors the hand-drawn pixel scenery.
         cloud_fill = (242, 255, 216) if scene["theme"] in ("day", "city") else scene["cloud"]
         cloud_shadow = tuple(max(0, channel - 32) for channel in cloud_fill)
         cloud_y = 445
@@ -526,17 +564,21 @@ class FlappyGame:
             (485, 115, 214), (660, 66, 132), (779, 108, 183), (945, 76, 162),
             (1098, 120, 220), (1222, 72, 156),
         )
-        for index, (x, width, height) in enumerate(building_specs):
-            top = horizon - height
-            rect = pygame.Rect(x, top, width, height)
-            pygame.draw.rect(surface, building_outline, rect.inflate(8, 8), 5)
-            pygame.draw.rect(surface, building_fill, rect)
-            pygame.draw.rect(surface, (209, 250, 224), (x + 8, top + 8, 7, height - 16))
-            for window_y in range(top + 16, horizon - 14, 24):
-                for window_x in range(x + 20, x + width - 8, 22):
-                    pygame.draw.rect(surface, (116, 200, 185), (window_x, window_y, 8, 12))
-            if index % 3 == 1:
-                pygame.draw.rect(surface, building_outline, (x + width // 2 - 12, top - 28, 24, 28), 4)
+        if scene["theme"] in ("day", "night", "city"):
+            for index, (x, width, height) in enumerate(building_specs):
+                top = horizon - height
+                rect = pygame.Rect(x, top, width, height)
+                pygame.draw.rect(surface, building_outline, rect.inflate(8, 8), 5)
+                pygame.draw.rect(surface, building_fill, rect)
+                pygame.draw.rect(surface, (209, 250, 224), (x + 8, top + 8, 7, height - 16))
+                for window_y in range(top + 16, horizon - 14, 24):
+                    for window_x in range(x + 20, x + width - 8, 22):
+                        window_color = (116, 200, 185)
+                        if scene["theme"] in ("night", "city") and (index + window_x // 22 + window_y // 24) % 3 == 0:
+                            window_color = (255, 218, 124)
+                        pygame.draw.rect(surface, window_color, (window_x, window_y, 8, 12))
+                if index % 3 == 1:
+                    pygame.draw.rect(surface, building_outline, (x + width // 2 - 12, top - 28, 24, 28), 4)
 
         if scene["theme"] == "forest":
             for x in range(0, SCREEN_WIDTH + 80, 105):

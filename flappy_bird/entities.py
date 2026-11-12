@@ -93,16 +93,44 @@ class Bird:
         pygame.draw.rect(sprite, (17, 21, 39), (eye_x - cell, eye_y - cell, 5 * cell, 6 * cell))
         pygame.draw.rect(sprite, (255, 250, 230), (eye_x, eye_y, 3 * cell, 4 * cell))
         pygame.draw.rect(sprite, (24, 31, 56), (eye_x + 2 * cell, eye_y + 2 * cell, cell, 2 * cell))
+        pygame.draw.rect(sprite, (255, 255, 255), (eye_x, eye_y, cell, cell))
         beak_x, beak_y = (start_x + 21) * cell, (start_y + 6) * cell
         pygame.draw.rect(sprite, (49, 37, 45), (beak_x, beak_y, 5 * cell, 4 * cell))
         pygame.draw.rect(sprite, (242, 91, 40), (beak_x, beak_y + cell, 4 * cell, 2 * cell))
         pygame.draw.rect(sprite, (255, 189, 62), (beak_x, beak_y, 4 * cell, cell))
         pygame.draw.rect(sprite, (255, 223, 112), (beak_x + cell, beak_y, 2 * cell, cell))
+        pygame.draw.rect(sprite, (175, 70, 53), (beak_x + cell, beak_y + 2 * cell, 2 * cell, cell))
 
         feet_y = (start_y + 12) * cell
         for foot_x in ((start_x + 7) * cell, (start_x + 13) * cell):
             pygame.draw.rect(sprite, (49, 37, 45), (foot_x, feet_y, cell, 2 * cell))
             pygame.draw.rect(sprite, (242, 130, 48), (foot_x - cell, feet_y + cell, 3 * cell, cell))
+
+        bird_id = self.bird_type.get("id", "classic")
+        if bird_id == "robot":
+            pygame.draw.rect(sprite, (42, 226, 225), ((start_x + 4) * cell, (start_y + 4) * cell, 2 * cell, 2 * cell))
+            pygame.draw.rect(sprite, (42, 226, 225), ((start_x + 7) * cell, (start_y + 3) * cell, cell, cell))
+            pygame.draw.rect(sprite, (168, 193, 205), ((start_x + 5) * cell, (start_y + 8) * cell, 3 * cell, cell))
+        elif bird_id == "ghost":
+            pygame.draw.rect(sprite, (242, 251, 255), ((start_x + 4) * cell, (start_y + 5) * cell, 2 * cell, cell))
+            pygame.draw.rect(sprite, (242, 251, 255), ((start_x + 6) * cell, (start_y + 4) * cell, cell, cell))
+            pygame.draw.rect(sprite, (152, 165, 211), ((start_x + 5) * cell, (start_y + 9) * cell, 4 * cell, cell))
+        elif bird_id == "space":
+            pygame.draw.rect(sprite, (255, 245, 180), ((start_x + 6) * cell, (start_y + 3) * cell, cell, cell))
+            pygame.draw.rect(sprite, (255, 245, 180), ((start_x + 8) * cell, (start_y + 5) * cell, cell, cell))
+            pygame.draw.rect(sprite, (255, 245, 180), ((start_x + 4) * cell, (start_y + 8) * cell, cell, cell))
+        elif bird_id == "fire":
+            pygame.draw.rect(sprite, (255, 238, 92), ((start_x + 6) * cell, (start_y + 2) * cell, 2 * cell, 2 * cell))
+            pygame.draw.rect(sprite, (255, 122, 42), ((start_x + 4) * cell, (start_y + 3) * cell, 2 * cell, 2 * cell))
+        elif bird_id == "ice":
+            pygame.draw.rect(sprite, (241, 255, 255), ((start_x + 7) * cell, (start_y + 2) * cell, 2 * cell, 2 * cell))
+            pygame.draw.rect(sprite, (163, 243, 255), ((start_x + 5) * cell, (start_y + 3) * cell, 2 * cell, cell))
+        elif bird_id == "golden":
+            pygame.draw.rect(sprite, (255, 251, 189), ((start_x + 6) * cell, (start_y + 3) * cell, 3 * cell, cell))
+            pygame.draw.rect(sprite, (255, 251, 189), ((start_x + 5) * cell, (start_y + 4) * cell, cell, cell))
+        elif bird_id == "legend":
+            pygame.draw.rect(sprite, (255, 232, 125), ((start_x + 7) * cell, (start_y + 1) * cell, cell, 3 * cell))
+            pygame.draw.rect(sprite, (255, 232, 125), ((start_x + 5) * cell, (start_y + 3) * cell, 5 * cell, cell))
 
         pitch = max(-2, min(2, int(self.velocity / 240)))
         sprite = pygame.transform.rotate(sprite, -pitch * 7)
@@ -143,7 +171,11 @@ class PipePair:
             pygame.draw.rect(surface, (237, 255, 223), (rect.x + 26, rect.y, 8, rect.height))
             pygame.draw.rect(surface, (95, 250, 81), (rect.x + 38, rect.y, 5, rect.height))
             for segment_y in range(rect.y + 38, rect.bottom, 78):
-                pygame.draw.rect(surface, (35, 185, 60), (rect.x + 43, segment_y, rect.width - 60, 3))
+                pygame.draw.rect(surface, (35, 185, 60), (rect.x + 43, segment_y, rect.width - 60, 4))
+                pygame.draw.rect(surface, (141, 255, 111), (rect.x + 45, segment_y + 1, 8, 2))
+            for detail_y in range(rect.y + 18, rect.bottom - 12, 72):
+                pygame.draw.rect(surface, (13, 118, 54), (rect.right - 13, detail_y, 5, 5))
+                pygame.draw.rect(surface, (190, 255, 154), (rect.x + 11, detail_y + 2, 4, 4))
 
             cap_y = rect.bottom - 24 if cap_at_bottom else rect.y
             cap = pygame.Rect(rect.x - 12, cap_y, rect.width + 24, 24)
@@ -153,6 +185,10 @@ class PipePair:
             pygame.draw.rect(surface, (237, 255, 223), (cap.x + 27, cap.y + 4, 8, cap.height - 8))
             pygame.draw.rect(surface, dark, (cap.right - 18, cap.y + 3, 10, cap.height - 6))
             pygame.draw.line(surface, (180, 255, 164), (cap.x + 4, cap.y + 3), (cap.right - 4, cap.y + 3), 2)
+            pygame.draw.line(surface, (16, 123, 51), (cap.x + 3, cap.bottom - 3), (cap.right - 3, cap.bottom - 3), 2)
+            for bolt_x in (cap.x + 6, cap.right - 10):
+                pygame.draw.rect(surface, (34, 111, 58), (bolt_x, cap.y + 9, 4, 4))
+                pygame.draw.rect(surface, (190, 255, 154), (bolt_x, cap.y + 9, 2, 2))
 
         top_rect = pygame.Rect(round(self.x), 0, self.width, max(0, self.gap_y))
         bottom_rect = pygame.Rect(
