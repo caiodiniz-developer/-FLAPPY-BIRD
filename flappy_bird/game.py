@@ -36,6 +36,8 @@ class FlappyGame:
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 52, bold=True)
         self.small_font = pygame.font.SysFont("Arial", 22)
+        self.arcade_font = pygame.font.SysFont("Courier New", 60, bold=True)
+        self.arcade_small_font = pygame.font.SysFont("Courier New", 19, bold=True)
         self.loading_steps = [
             "Inicializando Pygame",
             "Carregando cenários",
@@ -53,6 +55,8 @@ class FlappyGame:
         self.transition_alpha = 0
 
         self.reset_run()
+        self.menu_bird = Bird(900, 375, self.bird_by_id(self.current_bird_id))
+        self.menu_elapsed = 0.0
         self.populate_menu_buttons()
 
     def bird_by_id(self, bird_id):
@@ -69,11 +73,11 @@ class FlappyGame:
 
     def populate_menu_buttons(self):
         self.menu_buttons = [
-            Button(520, 260, 240, 60, "JOGAR", self.start_game, accent=(130, 220, 120)),
-            Button(520, 340, 240, 60, "LOJA", self.open_shop, accent=(110, 180, 255)),
-            Button(520, 420, 240, 60, "CONQUISTAS", self.open_achievements, accent=(255, 200, 80)),
-            Button(520, 500, 240, 60, "CENÁRIOS", self.open_scenarios, accent=(170, 120, 255)),
-            Button(520, 580, 240, 60, "CONFIG", self.open_settings, accent=(255, 140, 140)),
+            Button(112, 292, 340, 52, "JOGAR", self.start_game, accent=(255, 190, 70), text_color=(35, 28, 38)),
+            Button(112, 357, 340, 48, "LOJA", self.open_shop, accent=(102, 194, 214), text_color=(25, 34, 52)),
+            Button(112, 417, 340, 48, "CONQUISTAS", self.open_achievements, accent=(157, 202, 116), text_color=(25, 34, 52)),
+            Button(112, 477, 340, 48, "CENÁRIOS", self.open_scenarios, accent=(184, 150, 216), text_color=(25, 34, 52)),
+            Button(112, 537, 340, 48, "CONFIGURAÇÕES", self.open_settings, accent=(223, 132, 112), text_color=(35, 28, 38)),
         ]
 
     def reset_run(self):
@@ -118,6 +122,7 @@ class FlappyGame:
             self.save_data["selected_bird"] = bird_id
             self.current_bird_id = bird_id
             self.current_bird = bird
+            self.menu_bird.bird_type = bird
             save_state(self.save_data)
             return
         if self.save_data["coins"] >= bird["price"]:
@@ -126,6 +131,7 @@ class FlappyGame:
             self.save_data["selected_bird"] = bird_id
             self.current_bird_id = bird_id
             self.current_bird = bird
+            self.menu_bird.bird_type = bird
             save_state(self.save_data)
 
     def buy_scene(self, scene_id):
@@ -236,16 +242,16 @@ class FlappyGame:
             for button in self.menu_buttons:
                 button.handle_event(event)
 
-        if self.state == "shop":
+        if self.state == "shop" and event.type == pygame.MOUSEBUTTONDOWN:
             for card in self.shop_cards:
                 if card["rect"].collidepoint(event.pos):
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if event.button == 1:
                         self.buy_bird(card["bird_id"])
 
-        if self.state == "scenarios":
+        if self.state == "scenarios" and event.type == pygame.MOUSEBUTTONDOWN:
             for card in self.scenario_cards:
                 if card["rect"].collidepoint(event.pos):
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if event.button == 1:
                         self.buy_scene(card["scene_id"])
 
         if self.state == "playing":
@@ -280,6 +286,11 @@ class FlappyGame:
         if self.state == "game_over":
             self.update_particles(dt)
             return
+
+        if self.state == "menu":
+            self.menu_elapsed += dt
+            self.menu_bird.frame += dt * 12
+            self.menu_bird.y = 375 + math.sin(self.menu_elapsed * 2.2) * 10
 
     def draw_background(self, surface, scene):
         gradient = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -346,17 +357,95 @@ class FlappyGame:
             pygame.draw.rect(surface, (255, 255, 255, 80), (x, ground_y + 40 + (x % 40), 10, 10), border_radius=4)
 
     def draw_menu(self):
-        self.draw_background(self.screen, self.current_scene)
-        title = self.big_font.render("FLAPPY BIRD DELUXE", True, (255, 255, 255))
-        self.screen.blit(title, (380, 115))
+        for y in range(0, SCREEN_HEIGHT, 8):
+            blend = y / SCREEN_HEIGHT
+            color = (
+                int(lerp(49, 157, blend)),
+                int(lerp(164, 217, blend)),
+                int(lerp(205, 189, blend)),
+            )
+            pygame.draw.rect(self.screen, color, (0, y, SCREEN_WIDTH, 8))
+
+        # Pixel clouds and distant pines give the title screen its own arcade stage.
+        cloud_shift = int(pygame.time.get_ticks() * 0.012) % (SCREEN_WIDTH + 180)
+        for cloud_x, cloud_y in ((95, 105), (495, 165), (930, 90), (1250, 190)):
+            x = (cloud_x - cloud_shift) % (SCREEN_WIDTH + 180) - 90
+            pygame.draw.rect(self.screen, (229, 248, 227), (x, cloud_y + 12, 118, 22))
+            pygame.draw.rect(self.screen, (229, 248, 227), (x + 24, cloud_y, 64, 18))
+            pygame.draw.rect(self.screen, (176, 224, 214), (x + 10, cloud_y + 32, 102, 8))
+
+        pygame.draw.rect(self.screen, (255, 218, 112), (1020, 170, 70, 70))
+        pygame.draw.rect(self.screen, (255, 237, 153), (1030, 160, 50, 90))
+        for x, peak, color in ((-20, 468, (109, 186, 152)), (350, 438, (91, 166, 139)), (760, 455, (80, 148, 127)), (1110, 430, (70, 132, 119))):
+            for step in range(0, 7):
+                width = 90 + step * 36
+                y = peak + step * 17
+                pygame.draw.rect(self.screen, color, (x - step * 18, y, width, 18))
+
+        for tree_x, tree_y, size in ((625, 490, 1), (760, 470, 1.2), (1030, 480, 1), (1170, 455, 1.25)):
+            trunk_w = int(14 * size)
+            trunk_h = int(56 * size)
+            pygame.draw.rect(self.screen, (104, 75, 58), (tree_x, tree_y, trunk_w, trunk_h))
+            for tier in range(4):
+                tier_w = int((42 - tier * 6) * size)
+                tier_h = int(24 * size)
+                pygame.draw.rect(
+                    self.screen,
+                    (53 - tier * 4, 137 - tier * 6, 96 - tier * 4),
+                    (tree_x - (tier_w - trunk_w) // 2, tree_y - 20 - tier * 21, tier_w, tier_h),
+                )
+
+        ground_y = 598
+        pygame.draw.rect(self.screen, (49, 128, 83), (0, ground_y, SCREEN_WIDTH, SCREEN_HEIGHT - ground_y))
+        pygame.draw.rect(self.screen, (126, 197, 104), (0, ground_y, SCREEN_WIDTH, 12))
+        pygame.draw.rect(self.screen, (210, 178, 113), (0, ground_y + 18, SCREEN_WIDTH, SCREEN_HEIGHT - ground_y - 18))
+        for x in range(0, SCREEN_WIDTH, 32):
+            pygame.draw.rect(self.screen, (95, 147, 84), (x, ground_y, 16, 5))
+            pygame.draw.rect(self.screen, (173, 133, 95), (x + (16 if x % 64 else 0), ground_y + 27, 16, 10))
+            pygame.draw.rect(self.screen, (187, 147, 103), (x, ground_y + 51, 16, 10))
+
+        # Chunky bordered panel, deliberately kept translucent over the scenery.
+        panel = pygame.Surface((456, 574), pygame.SRCALPHA)
+        panel.fill((18, 30, 52, 232))
+        self.screen.blit(panel, (54, 44))
+        pygame.draw.rect(self.screen, (20, 26, 44), (50, 40, 464, 582), 7)
+        pygame.draw.rect(self.screen, (246, 190, 91), (58, 48, 448, 566), 3)
+        pygame.draw.rect(self.screen, (255, 222, 130), (58, 48, 448, 8))
+
+        def arcade_text(label, position, color, font):
+            text = font.render(label, True, color)
+            shadow = font.render(label, True, (15, 20, 37))
+            self.screen.blit(shadow, (position[0] + 4, position[1] + 5))
+            self.screen.blit(text, position)
+
+        arcade_text("FLAPPY", (100, 84), (255, 205, 96), self.arcade_font)
+        arcade_text("BIRD", (102, 143), (123, 214, 218), self.arcade_font)
+        pygame.draw.rect(self.screen, (246, 190, 91), (100, 222, 348, 3))
+        arcade_text("PIXEL ARCADE EDITION", (104, 235), (208, 226, 218), self.arcade_small_font)
 
         for button in self.menu_buttons:
-            button.draw(self.screen, self.font)
+            button.draw(self.screen, self.arcade_small_font)
 
-        coin_display = self.small_font.render(f"Moedas: {self.save_data['coins']}", True, (255, 255, 255))
-        best_score = self.small_font.render(f"Recorde: {self.save_data['high_score']}", True, (255, 255, 255))
-        self.screen.blit(coin_display, (120, 85))
-        self.screen.blit(best_score, (980, 85))
+        pygame.draw.rect(self.screen, (20, 26, 44), (766, 42, 212, 48))
+        pygame.draw.rect(self.screen, (246, 190, 91), (766, 42, 212, 48), 3)
+        pygame.draw.rect(self.screen, (20, 26, 44), (990, 42, 226, 48))
+        pygame.draw.rect(self.screen, (246, 190, 91), (990, 42, 226, 48), 3)
+        coin_display = self.arcade_small_font.render(f"MOEDAS  {self.save_data['coins']}", True, (255, 221, 130))
+        best_score = self.arcade_small_font.render(f"RECORDE  {self.save_data['high_score']}", True, (234, 245, 227))
+        self.screen.blit(coin_display, (780, 55))
+        self.screen.blit(best_score, (1004, 55))
+
+        pygame.draw.rect(self.screen, (18, 30, 52), (690, 265, 440, 250), 5)
+        pygame.draw.rect(self.screen, (32, 75, 86), (704, 279, 412, 222))
+        pygame.draw.rect(self.screen, (246, 190, 91), (700, 275, 420, 230), 2)
+        self.screen.blit(self.arcade_small_font.render("PLAYER 01", True, (255, 224, 143)), (824, 284))
+        pygame.draw.rect(self.screen, (255, 232, 153), (808, 447, 184, 8))
+        pygame.draw.rect(self.screen, (255, 232, 153), (832, 455, 136, 5))
+        self.menu_bird.draw(self.screen, self.current_scene, scale=2.15)
+        hint = self.arcade_small_font.render("SPACE / CLICK TO FLAP", True, (244, 249, 229))
+        self.screen.blit(hint, hint.get_rect(center=(910, 550)))
+        footer = self.arcade_small_font.render("PRESS START  •  FLY YOUR WAY", True, (48, 95, 72))
+        self.screen.blit(footer, footer.get_rect(center=(910, 635)))
 
     def draw_shop(self):
         self.draw_background(self.screen, self.current_scene)
@@ -372,8 +461,7 @@ class FlappyGame:
             selected = bird["id"] == self.save_data["selected_bird"]
             pygame.draw.rect(self.screen, (27, 39, 58), rect, border_radius=22)
             pygame.draw.rect(self.screen, (255, 255, 255, 100), rect.inflate(-8, -8), border_radius=18, width=2)
-            pygame.draw.circle(self.screen, bird["colors"], (x + 90, y + 70), 34)
-            pygame.draw.circle(self.screen, bird["accent"], (x + 90, y + 70), 15)
+            Bird(x + 90, y + 72, bird).draw(self.screen, self.current_scene, scale=0.9)
             label = self.small_font.render(bird["name"], True, (255, 255, 255))
             self.screen.blit(label, (x + 16, y + 120))
             price_text = self.small_font.render(f"{bird['price']} moedas" if not unlocked else "Comprado", True, (255, 210, 110))

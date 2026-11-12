@@ -24,28 +24,87 @@ class Bird:
         self.y += self.velocity * dt
         self.frame += dt * 18
 
-    def draw(self, surface, scene):
-        color = self.bird_type.get("colors", (255, 214, 10))
+    def draw(self, surface, scene, scale=1.0):
+        cell = 3
+        mask = (
+            ".......######........",
+            ".....##########......",
+            "...##############....",
+            "..################..",
+            ".##################.",
+            "####################",
+            "####################",
+            ".##################.",
+            "..################..",
+            "...##############...",
+            ".....##########......",
+            "......########........",
+        )
+        base = self.bird_type.get("colors", (255, 214, 10))
         accent = self.bird_type.get("accent", (255, 146, 43))
-        wing_phase = math.sin(self.frame) * 10
-        angle = max(-1.2, min(1.4, self.velocity / 550))
+        shadow = tuple(max(12, channel // 3) for channel in base)
+        highlight = tuple(min(255, int(channel * 0.68 + 88)) for channel in base)
+        sprite = pygame.Surface((26 * cell, 20 * cell), pygame.SRCALPHA)
+        start_x, start_y = 2, 3
 
-        body_rect = pygame.Rect(int(self.x - self.radius), int(self.y - self.radius), self.radius * 2, self.radius * 2)
-        wing_rect = pygame.Rect(int(self.x - self.radius + 8), int(self.y - 6 + wing_phase), self.radius * 1.4, self.radius * 0.9)
+        # Expand the silhouette by one pixel to create a crisp arcade outline.
+        for row, pattern in enumerate(mask):
+            for column, pixel in enumerate(pattern):
+                if pixel != "#":
+                    continue
+                x = start_x + column
+                y = start_y + row
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    if not (0 <= row + dy < len(mask) and 0 <= column + dx < len(mask[row + dy])):
+                        pygame.draw.rect(sprite, (17, 21, 39), ((x + dx) * cell, (y + dy) * cell, cell, cell))
+                    elif mask[row + dy][column + dx] != "#":
+                        pygame.draw.rect(sprite, (17, 21, 39), ((x + dx) * cell, (y + dy) * cell, cell, cell))
 
-        rotated = pygame.Surface((self.radius * 2 + 30, self.radius * 2 + 30), pygame.SRCALPHA)
-        pygame.draw.ellipse(rotated, color, (15, 15, self.radius * 2, self.radius * 2))
-        pygame.draw.ellipse(rotated, accent, (26, 22, self.radius, self.radius * 0.7))
-        pygame.draw.ellipse(rotated, (255, 255, 255), (32, 22, 8, 8))
-        pygame.draw.ellipse(rotated, (0, 0, 0), (35, 25, 4, 4))
-        pygame.draw.ellipse(rotated, (255, 228, 100), (10, 10, 18, 18))
-        pygame.draw.ellipse(rotated, color, (body_rect.left - 5, body_rect.top + 7, self.radius * 1.5, self.radius * 0.8))
-        pygame.draw.polygon(rotated, accent, [(self.x - self.radius + 25, self.y), (self.x - self.radius + 50, self.y + 6), (self.x - self.radius + 25, self.y + 12)])
-        pygame.draw.polygon(rotated, (255, 210, 130), [(self.x - self.radius + 25, self.y + 2), (self.x - self.radius + 40, self.y + 6), (self.x - self.radius + 25, self.y + 10)])
+        wing_lift = int(math.sin(self.frame * 1.25) * 2)
+        for row, pattern in enumerate(mask):
+            for column, pixel in enumerate(pattern):
+                if pixel != "#":
+                    continue
+                x = start_x + column
+                y = start_y + row
+                color = base
+                if row < 3 and column > 11:
+                    color = highlight
+                elif row > 7 and column < 10:
+                    color = accent
+                pygame.draw.rect(sprite, color, (x * cell, y * cell, cell, cell))
 
-        rotated = pygame.transform.rotate(rotated, math.degrees(angle) * 20)
-        rotated_rect = rotated.get_rect(center=(self.x, self.y))
-        surface.blit(rotated, rotated_rect)
+        # A layered wing, cream belly, bright beak and chunky pixel eye give
+        # each unlockable bird a readable silhouette at gameplay scale.
+        wing_x = (start_x + 5) * cell
+        wing_y = (start_y + 6) * cell + wing_lift
+        pygame.draw.rect(sprite, shadow, (wing_x, wing_y + cell, 8 * cell, 4 * cell))
+        pygame.draw.rect(sprite, highlight, (wing_x + cell, wing_y, 6 * cell, 4 * cell))
+        pygame.draw.rect(sprite, base, (wing_x + 2 * cell, wing_y + cell, 5 * cell, cell))
+        pygame.draw.rect(sprite, (255, 238, 199), ((start_x + 9) * cell, (start_y + 8) * cell, 6 * cell, 2 * cell))
+
+        eye_x, eye_y = (start_x + 15) * cell, (start_y + 3) * cell
+        pygame.draw.rect(sprite, (17, 21, 39), (eye_x - cell, eye_y - cell, 4 * cell, 5 * cell))
+        pygame.draw.rect(sprite, (255, 250, 230), (eye_x, eye_y, 2 * cell, 3 * cell))
+        pygame.draw.rect(sprite, (24, 31, 56), (eye_x + cell, eye_y + cell, cell, 2 * cell))
+        beak_x, beak_y = (start_x + 20) * cell, (start_y + 6) * cell
+        pygame.draw.rect(sprite, (123, 54, 41), (beak_x, beak_y + cell, 4 * cell, 2 * cell))
+        pygame.draw.rect(sprite, accent, (beak_x, beak_y, 4 * cell, cell))
+        pygame.draw.rect(sprite, (255, 236, 155), (beak_x + cell, beak_y, 2 * cell, cell))
+
+        feet_y = (start_y + 12) * cell
+        for foot_x in ((start_x + 7) * cell, (start_x + 13) * cell):
+            pygame.draw.rect(sprite, (82, 48, 42), (foot_x, feet_y, cell, 2 * cell))
+            pygame.draw.rect(sprite, accent, (foot_x - cell, feet_y + cell, 3 * cell, cell))
+
+        pitch = max(-2, min(2, int(self.velocity / 240)))
+        sprite = pygame.transform.rotate(sprite, -pitch * 7)
+        if scale != 1.0:
+            sprite = pygame.transform.scale(
+                sprite,
+                (round(sprite.get_width() * scale), round(sprite.get_height() * scale)),
+            )
+        surface.blit(sprite, sprite.get_rect(center=(round(self.x), round(self.y))))
 
 
 class PipePair:
@@ -155,12 +214,14 @@ class Button:
 
     def draw(self, surface, font):
         self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
-        color = tuple(max(0, min(255, c + (40 if self.hovered else 0))) for c in self.accent)
-        inner = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(inner, (*color, 220), (0, 0, self.rect.width, self.rect.height), border_radius=self.radius)
-        pygame.draw.rect(inner, (255, 255, 255, 80), (2, 2, self.rect.width - 4, self.rect.height - 4), border_radius=self.radius, width=2)
-        surface.blit(inner, self.rect.topleft)
-
+        color = tuple(max(0, min(255, channel + (24 if self.hovered else 0))) for channel in self.accent)
+        shadow = self.rect.move(0, 5)
+        pygame.draw.rect(surface, (20, 28, 46), shadow)
+        pygame.draw.rect(surface, (17, 21, 39), self.rect.inflate(6, 6))
+        pygame.draw.rect(surface, color, self.rect)
+        pygame.draw.rect(surface, tuple(min(255, c + 55) for c in color), (self.rect.x + 4, self.rect.y + 4, self.rect.width - 8, 5))
+        pygame.draw.rect(surface, tuple(max(0, c - 45) for c in color), (self.rect.x + 4, self.rect.bottom - 8, self.rect.width - 8, 4))
         text = font.render(self.label, True, self.text_color)
         text_rect = text.get_rect(center=self.rect.center)
+        surface.blit(font.render(self.label, True, (17, 21, 39)), text_rect.move(2, 2))
         surface.blit(text, text_rect)
