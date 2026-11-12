@@ -15,7 +15,7 @@ from flappy_bird.config import (
     clamp,
     lerp,
 )
-from flappy_bird.entities import Bird, Button, Coin, Particle, PipePair
+from flappy_bird.entities import Bird, Button, Coin, Particle, PipePair, draw_coin_icon
 from flappy_bird.save_data import load_state, save_state
 
 
@@ -48,6 +48,7 @@ class FlappyGame:
         self.small_font = pygame.font.SysFont("Arial", 22)
         self.arcade_font = pygame.font.SysFont("Arial", 58, bold=True)
         self.arcade_small_font = pygame.font.SysFont("Arial", 19, bold=True)
+        self.hud_score_font = pygame.font.SysFont("Arial", 40, bold=True)
         self.loading_steps = [
             "Inicializando Pygame",
             "Carregando cenários",
@@ -114,6 +115,7 @@ class FlappyGame:
         self.round_coins = 0
         self.streak = 0
         self.best_streak = 0
+        self.pipes_spawned = 0
         self.pipe_timer = 0.0
         self.sound_timer = 0.0
         self.started = False
@@ -235,9 +237,14 @@ class FlappyGame:
         gap_y = random.randint(140, SCREEN_HEIGHT - 220)
         preset = DIFFICULTY_PRESETS.get(self.save_data["settings"].get("difficulty"), DIFFICULTY_PRESETS["normal"])
         speed = preset["speed"] + min(self.score * 3, 120)
-        self.pipes.append(PipePair(SCREEN_WIDTH + 80, gap_y, preset["gap"], speed=speed))
-        coin_y = gap_y + PIPE_GAP / 2
-        self.coins.append(Coin(SCREEN_WIDTH + 80 + 30, coin_y))
+        pipe_x = SCREEN_WIDTH + 80
+        gap_height = preset["gap"]
+        self.pipes.append(PipePair(pipe_x, gap_y, gap_height, speed=speed))
+        coin_y = gap_y + gap_height / 2
+        coin_offsets = (-38, 0, 38) if (self.pipes_spawned + 1) % 4 == 0 else (0,)
+        for offset in coin_offsets:
+            self.coins.append(Coin(pipe_x + 45 + offset, coin_y, speed=speed))
+        self.pipes_spawned += 1
 
     def update_particles(self, dt):
         for particle in self.particles[:]:
@@ -370,7 +377,7 @@ class FlappyGame:
             elif event.type == pygame.KEYDOWN and event.key in {pygame.K_SPACE, pygame.K_w, pygame.K_UP}:
                 self.bird.jump()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if pygame.Rect(1156, 18, 88, 42).collidepoint(event.pos):
+                if pygame.Rect(1156, 22, 88, 48).collidepoint(event.pos):
                     self.pause_game()
                     return
                 else:
@@ -684,20 +691,25 @@ class FlappyGame:
         pygame.draw.rect(self.screen, (246, 190, 91), (766, 42, 212, 48), 3)
         pygame.draw.rect(self.screen, (20, 26, 44), (990, 42, 226, 48))
         pygame.draw.rect(self.screen, (246, 190, 91), (990, 42, 226, 48), 3)
+        draw_coin_icon(self.screen, (790, 66), phase=math.pi / 2, radius=9)
         coin_display = self.arcade_small_font.render(f"MOEDAS  {self.save_data['coins']}", True, (255, 221, 130))
         best_score = self.arcade_small_font.render(f"RECORDE  {self.save_data['high_score']}", True, (234, 245, 227))
-        self.screen.blit(coin_display, (780, 55))
+        self.screen.blit(coin_display, (806, 55))
         self.screen.blit(best_score, (1004, 55))
 
         pygame.draw.rect(self.screen, (18, 30, 52), (690, 265, 440, 250), 5)
         pygame.draw.rect(self.screen, (32, 75, 86), (704, 279, 412, 222))
         pygame.draw.rect(self.screen, (246, 190, 91), (700, 275, 420, 230), 2)
-        self.screen.blit(self.arcade_small_font.render("JOGADOR 01", True, (255, 224, 143)), (824, 284))
+        player_label = self.arcade_small_font.render(self.current_bird["name"].upper(), True, (255, 224, 143))
+        self.screen.blit(player_label, player_label.get_rect(center=(910, 296)))
+        pygame.draw.rect(self.screen, (58, 106, 113), (804, 319, 212, 2))
         pygame.draw.rect(self.screen, (255, 232, 153), (808, 447, 184, 8))
         pygame.draw.rect(self.screen, (255, 232, 153), (832, 455, 136, 5))
         self.menu_bird.draw(self.screen, self.current_scene, scale=2.15)
-        hint = self.arcade_small_font.render("ESPAÇO / CLIQUE PARA VOAR", True, (244, 249, 229))
-        self.screen.blit(hint, hint.get_rect(center=(910, 550)))
+        hint = self.arcade_small_font.render("TRILHA BÔNUS A CADA 4 CANOS", True, (255, 221, 130))
+        self.screen.blit(hint, hint.get_rect(center=(910, 535)))
+        control_hint = self.small_font.render("ESPAÇO / CLIQUE PARA VOAR", True, (244, 249, 229))
+        self.screen.blit(control_hint, control_hint.get_rect(center=(910, 566)))
         footer = self.arcade_small_font.render("APERTE ESPAÇO  •  VAMOS VOAR", True, (48, 95, 72))
         self.screen.blit(footer, footer.get_rect(center=(910, 635)))
 
@@ -895,19 +907,34 @@ class FlappyGame:
         for particle in self.particles:
             particle.draw(self.screen)
 
-        hud = pygame.Surface((200, 66), pygame.SRCALPHA)
-        hud.fill((13, 25, 42, 175))
-        self.screen.blit(hud, (24, 20))
-        pygame.draw.rect(self.screen, (255, 207, 117), (24, 20, 200, 66), width=2)
-        coins_text = self.arcade_small_font.render(f"MOEDAS  {self.round_coins}", True, (255, 220, 130))
-        combo_text = self.arcade_small_font.render(f"SEQUÊNCIA  {self.streak}", True, (170, 231, 183))
-        self.screen.blit(coins_text, (38, 29))
-        self.screen.blit(combo_text, (38, 57))
-        score_text = self.arcade_font.render(str(self.score), True, (255, 245, 220))
-        score_shadow = self.arcade_font.render(str(self.score), True, (48, 39, 55))
-        self.screen.blit(score_shadow, score_shadow.get_rect(center=(SCREEN_WIDTH // 2 + 3, 54)))
-        self.screen.blit(score_text, score_text.get_rect(center=(SCREEN_WIDTH // 2, 50)))
-        pause_button = Button(1156, 18, 88, 42, "II", None, accent=(255, 204, 112), text_color=(35, 28, 38))
+        def hud_panel(rect, accent):
+            pygame.draw.rect(self.screen, (12, 21, 38), rect.move(0, 5))
+            pygame.draw.rect(self.screen, (17, 34, 52), rect)
+            pygame.draw.rect(self.screen, accent, rect, width=2)
+            pygame.draw.rect(self.screen, accent, (rect.x + 7, rect.y + 7, rect.width - 14, 3))
+
+        coin_panel = pygame.Rect(24, 18, 230, 72)
+        hud_panel(coin_panel, (255, 207, 117))
+        draw_coin_icon(self.screen, (51, 56), phase=math.pi / 2, radius=11)
+        coin_label = self.arcade_small_font.render("MOEDAS", True, (197, 213, 215))
+        coin_count = self.small_font.render(f"+{self.round_coins}", True, (255, 226, 148))
+        self.screen.blit(coin_label, (76, 30))
+        self.screen.blit(coin_count, (76, 54))
+
+        score_panel = pygame.Rect(531, 14, 218, 82)
+        hud_panel(score_panel, (255, 207, 117))
+        score_label = self.arcade_small_font.render("PONTUAÇÃO", True, (197, 213, 215))
+        score_text = self.hud_score_font.render(str(self.score), True, (255, 245, 220))
+        self.screen.blit(score_label, score_label.get_rect(midtop=(640, 22)))
+        self.screen.blit(score_text, score_text.get_rect(midtop=(640, 43)))
+
+        streak_panel = pygame.Rect(956, 18, 184, 72)
+        hud_panel(streak_panel, (145, 216, 152))
+        streak_label = self.arcade_small_font.render("SEQUÊNCIA", True, (197, 213, 215))
+        streak_count = self.small_font.render(f"x{self.streak}", True, (174, 241, 187))
+        self.screen.blit(streak_label, streak_label.get_rect(midtop=(streak_panel.centerx, 30)))
+        self.screen.blit(streak_count, streak_count.get_rect(midtop=(streak_panel.centerx, 54)))
+        pause_button = Button(1156, 22, 88, 48, "II", None, accent=(255, 204, 112), text_color=(35, 28, 38))
         pause_button.draw(self.screen, self.arcade_small_font)
 
         if self.state == "game_over":

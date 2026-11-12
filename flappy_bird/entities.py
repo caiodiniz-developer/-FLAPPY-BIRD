@@ -207,28 +207,36 @@ class PipePair:
         return False
 
 
+def draw_coin_icon(surface, center, phase=0.0, radius=12):
+    center_x, center_y = round(center[0]), round(center[1])
+    width = max(6, int(radius * (1.1 + abs(math.sin(phase)) * 0.9)))
+    height = radius * 2
+    pygame.draw.rect(surface, (79, 48, 41), (center_x - width // 2 - 3, center_y - height // 2 - 3, width + 6, height + 6))
+    pygame.draw.rect(surface, (255, 184, 48), (center_x - width // 2, center_y - height // 2, width, height))
+    pygame.draw.rect(surface, (255, 226, 91), (center_x - width // 2 + 3, center_y - height // 2 + 3, max(2, width - 6), height - 6))
+    pygame.draw.rect(surface, (255, 247, 171), (center_x - width // 2 + 4, center_y - height // 2 + 4, max(2, width // 4), height - 8))
+    pygame.draw.rect(surface, (215, 129, 35), (center_x + width // 2 - 4, center_y - height // 2 + 4, 3, height - 8))
+    pygame.draw.rect(surface, (255, 255, 213), (center_x - 2, center_y - 3, 4, 6))
+
+
 class Coin:
-    def __init__(self, x, y):
+    def __init__(self, x, y, speed=PIPE_SPEED, value=1):
         self.x = x
         self.y = y
         self.radius = 12
-        self.value = 1
+        self.speed = speed
+        self.value = value
         self.phase = random.random() * math.tau
         self.collected = False
 
     def update(self, dt):
         self.phase += dt * 8
+        self.x -= self.speed * dt
 
     def draw(self, surface):
         if self.collected:
             return
-        center = (int(self.x), int(self.y))
-        glow = 18 + int(math.sin(self.phase) * 6)
-        pygame.draw.circle(surface, (255, 215, 90), center, self.radius + 6)
-        pygame.draw.circle(surface, (255, 238, 159), center, self.radius + glow // 5)
-        pygame.draw.circle(surface, (255, 190, 40), center, self.radius)
-        pygame.draw.circle(surface, (255, 255, 255), center, self.radius * 0.35)
-        pygame.draw.line(surface, (255, 240, 120), center, (center[0], center[1] - self.radius), 2)
+        draw_coin_icon(surface, (self.x, self.y), self.phase, self.radius)
 
     def collides_with(self, bird):
         distance = math.hypot(self.x - bird.x, self.y - bird.y)
