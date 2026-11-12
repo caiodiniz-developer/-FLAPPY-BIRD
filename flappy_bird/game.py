@@ -441,7 +441,7 @@ class FlappyGame:
 
         if self.state == "game_over":
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
+                if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_r):
                     self.start_game()
                 elif event.key == pygame.K_ESCAPE:
                     self.back_to_menu()
@@ -763,14 +763,26 @@ class FlappyGame:
             pygame.draw.rect(self.screen, bird["accent"], rect, width=2, border_radius=12)
             if selected:
                 pygame.draw.rect(self.screen, (145, 216, 152), rect.inflate(-8, -8), width=2, border_radius=10)
+            rarity_colors = {
+                "Comum": (179, 205, 194),
+                "Raro": (119, 204, 255),
+                "Épico": (204, 153, 255),
+                "Lendário": (255, 190, 105),
+                "Mitológico": (255, 132, 190),
+            }
+            rarity_color = rarity_colors.get(bird["rarity"], (220, 226, 218))
+            rarity = self.arcade_small_font.render(bird["rarity"].upper(), True, rarity_color)
+            rarity_rect = rarity.get_rect(midtop=(rect.centerx, y + 8))
+            self.screen.blit(rarity, rarity_rect)
             Bird(x + 101, y + 54, bird).draw(self.screen, self.current_scene, scale=0.72)
             label = self.small_font.render(bird["name"], True, (245, 245, 230))
             self.screen.blit(label, label.get_rect(center=(rect.centerx, y + 108)))
-            price_text = self.arcade_small_font.render(f"{bird['price']} moedas" if not unlocked else ("EQUIPADO" if selected else "DESBLOQUEADO"), True, (255, 215, 132))
+            price_text = self.arcade_small_font.render(
+                f"{bird['price']} MOEDAS" if not unlocked else ("EM USO" if selected else "DESBLOQUEADO"),
+                True,
+                (255, 215, 132) if not unlocked else ((164, 235, 169) if selected else (190, 215, 209)),
+            )
             self.screen.blit(price_text, price_text.get_rect(center=(rect.centerx, y + 140)))
-            if selected:
-                status = self.arcade_small_font.render("EM USO", True, (164, 235, 169))
-                self.screen.blit(status, status.get_rect(center=(rect.centerx, y + 170)))
             x += 218
             if x + 202 > 1190:
                 x = 100
@@ -874,26 +886,42 @@ class FlappyGame:
 
         self.draw_back_button(self.back_from_settings)
 
+    def draw_stat_card(self, rect, label, value, accent):
+        pygame.draw.rect(self.screen, (8, 16, 31), rect.move(0, 4))
+        pygame.draw.rect(self.screen, (23, 40, 59), rect)
+        pygame.draw.rect(self.screen, accent, rect, width=2)
+        pygame.draw.rect(self.screen, accent, (rect.x + 7, rect.y + 7, rect.width - 14, 3))
+        label_surface = self.arcade_small_font.render(label, True, (183, 203, 210))
+        self.screen.blit(label_surface, label_surface.get_rect(midtop=(rect.centerx, rect.y + 14)))
+        value_surface = self.small_font.render(str(value), True, accent)
+        self.screen.blit(value_surface, value_surface.get_rect(midbottom=(rect.centerx, rect.bottom - 9)))
+
     def draw_pause(self):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((9, 15, 29, 190))
         self.screen.blit(overlay, (0, 0))
-        panel = pygame.Rect(390, 125, 500, 485)
-        pygame.draw.rect(self.screen, (12, 21, 38), panel.move(0, 8), border_radius=18)
-        pygame.draw.rect(self.screen, (25, 42, 63), panel, border_radius=18)
+        panel = pygame.Rect(360, 105, 560, 520)
+        pygame.draw.rect(self.screen, (7, 13, 27), panel.move(0, 9), border_radius=18)
+        pygame.draw.rect(self.screen, (20, 37, 57), panel, border_radius=18)
         pygame.draw.rect(self.screen, (255, 207, 117), panel, width=3, border_radius=18)
+        pygame.draw.rect(self.screen, (255, 207, 117), (panel.x + 5, panel.y + 5, panel.width - 10, 7))
         title = self.big_font.render("PAUSADO", True, (255, 226, 164))
-        self.screen.blit(title, title.get_rect(center=(640, 195)))
-        subtitle = self.small_font.render("Seu voo está esperando.", True, (196, 218, 222))
-        self.screen.blit(subtitle, subtitle.get_rect(center=(640, 247)))
+        self.screen.blit(title, title.get_rect(center=(640, 174)))
+        subtitle = self.small_font.render("Respire. O próximo voo começa quando quiser.", True, (196, 218, 222))
+        self.screen.blit(subtitle, subtitle.get_rect(center=(640, 220)))
+        self.draw_stat_card(pygame.Rect(408, 252, 136, 74), "PONTOS", self.score, (255, 218, 136))
+        self.draw_stat_card(pygame.Rect(572, 252, 136, 74), "MOEDAS", f"+{self.round_coins}", (255, 218, 136))
+        self.draw_stat_card(pygame.Rect(736, 252, 136, 74), "COMBO", f"x{self.streak}", (160, 226, 173))
         self.pause_buttons = [
-            Button(490, 292, 300, 54, "CONTINUAR", self.resume_game, accent=(151, 211, 145), text_color=(25, 34, 52)),
-            Button(490, 359, 300, 50, "RECOMEÇAR", self.start_game, accent=(255, 204, 112), text_color=(35, 28, 38)),
-            Button(490, 422, 300, 50, "CONFIGURAÇÕES", self.open_settings, accent=(119, 190, 207), text_color=(25, 34, 52)),
-            Button(490, 485, 300, 50, "MENU PRINCIPAL", self.back_to_menu, accent=(221, 130, 113), text_color=(35, 28, 38)),
+            Button(490, 352, 300, 48, "CONTINUAR", self.resume_game, accent=(151, 211, 145), text_color=(25, 34, 52)),
+            Button(490, 412, 300, 46, "RECOMEÇAR", self.start_game, accent=(255, 204, 112), text_color=(35, 28, 38)),
+            Button(490, 470, 300, 46, "CONFIGURAÇÕES", self.open_settings, accent=(119, 190, 207), text_color=(25, 34, 52)),
+            Button(490, 528, 300, 46, "MENU PRINCIPAL", self.back_to_menu, accent=(221, 130, 113), text_color=(35, 28, 38)),
         ]
         for button in self.pause_buttons:
             button.draw(self.screen, self.arcade_small_font)
+        hint = self.arcade_small_font.render("ESC  •  CONTINUAR", True, (155, 181, 190))
+        self.screen.blit(hint, hint.get_rect(center=(640, 596)))
 
     def draw_game(self):
         self.draw_background(self.screen, self.current_scene)
@@ -941,29 +969,39 @@ class FlappyGame:
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             pygame.draw.rect(overlay, (5, 12, 24, 205), (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
             self.screen.blit(overlay, (0, 0))
-            panel = pygame.Rect(390, 125, 500, 485)
-            pygame.draw.rect(self.screen, (13, 24, 42), panel.move(0, 8), border_radius=18)
-            pygame.draw.rect(self.screen, (25, 42, 63), panel, border_radius=18)
+            panel = pygame.Rect(340, 82, 600, 548)
+            pygame.draw.rect(self.screen, (5, 12, 24), panel.move(0, 9), border_radius=18)
+            pygame.draw.rect(self.screen, (20, 37, 57), panel, border_radius=18)
             pygame.draw.rect(self.screen, (255, 207, 117), panel, width=3, border_radius=18)
+            pygame.draw.rect(self.screen, (255, 207, 117), (panel.x + 5, panel.y + 5, panel.width - 10, 7))
             title = self.big_font.render("FIM DE JOGO", True, (255, 226, 164))
-            self.screen.blit(title, title.get_rect(center=(640, 192)))
-            if self.warning_message:
-                status = self.arcade_small_font.render(self.warning_message, True, (160, 232, 165))
-                self.screen.blit(status, status.get_rect(center=(640, 240)))
+            self.screen.blit(title, title.get_rect(center=(640, 148)))
+            status_text = self.warning_message or "Mais um voo? Seu recorde espera."
+            status_color = (160, 232, 165) if self.warning_message else (196, 218, 222)
+            status = self.arcade_small_font.render(status_text, True, status_color)
+            self.screen.blit(status, status.get_rect(center=(640, 193)))
 
-            score_label = self.small_font.render(f"PONTUAÇÃO   {self.score}", True, (245, 242, 226))
-            record_label = self.small_font.render(f"RECORDE      {self.save_data['high_score']}", True, (245, 242, 226))
-            reward_label = self.small_font.render(f"MOEDAS GANHAS   +{self.round_coins}", True, (255, 220, 130))
-            streak_label = self.arcade_small_font.render(f"MELHOR SEQUÊNCIA   {self.best_streak}", True, (170, 231, 183))
-            for label, y in ((score_label, 292), (record_label, 332), (reward_label, 372), (streak_label, 412)):
-                self.screen.blit(label, label.get_rect(center=(640, y)))
+            score_card = pygame.Rect(390, 220, 500, 102)
+            pygame.draw.rect(self.screen, (8, 16, 31), score_card.move(0, 5))
+            pygame.draw.rect(self.screen, (26, 48, 66), score_card)
+            pygame.draw.rect(self.screen, (255, 207, 117), score_card, width=2)
+            score_caption = self.arcade_small_font.render("PONTUAÇÃO DA PARTIDA", True, (193, 212, 214))
+            score_value = self.hud_score_font.render(str(self.score), True, (255, 245, 220))
+            self.screen.blit(score_caption, score_caption.get_rect(center=(640, 244)))
+            self.screen.blit(score_value, score_value.get_rect(center=(640, 289)))
+
+            self.draw_stat_card(pygame.Rect(390, 345, 150, 88), "RECORDE", self.save_data["high_score"], (255, 218, 136))
+            self.draw_stat_card(pygame.Rect(565, 345, 150, 88), "GANHOS", f"+{self.round_coins}", (255, 218, 136))
+            self.draw_stat_card(pygame.Rect(740, 345, 150, 88), "COMBO", f"x{self.best_streak}", (160, 226, 173))
 
             self.game_over_buttons = [
-                Button(475, 465, 330, 52, "TENTAR DE NOVO", self.start_game, accent=(151, 211, 145), text_color=(25, 34, 52)),
+                Button(475, 465, 330, 52, "VOAR NOVAMENTE", self.start_game, accent=(151, 211, 145), text_color=(25, 34, 52)),
                 Button(475, 530, 330, 48, "MENU PRINCIPAL", self.back_to_menu, accent=(119, 190, 207), text_color=(25, 34, 52)),
             ]
             for button in self.game_over_buttons:
                 button.draw(self.screen, self.arcade_small_font)
+            hint = self.arcade_small_font.render("ESPAÇO / ENTER  •  NOVA TENTATIVA", True, (155, 181, 190))
+            self.screen.blit(hint, hint.get_rect(center=(640, 600)))
 
     def render_loading(self):
         self.draw_background(self.screen, self.current_scene)
